@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -88,6 +91,8 @@ fun RootMediaScreen() {
     var selected by remember { mutableStateOf<MediaItem?>(null) }
     var showSuBrowser by remember { mutableStateOf(false) }
     var rooted by remember { mutableStateOf<Boolean?>(null) }
+    var recentSaf by remember { mutableStateOf(getRecentSaf(context)) }
+    var recentSu by remember { mutableStateOf(getRecentSu(context)) }
 
     fun load(uri: Uri) {
         loading = true
@@ -141,6 +146,8 @@ fun RootMediaScreen() {
             } catch (_: Exception) { }
             saveRoot(context, uri)
             saveSuRoot(context, null) // ganti sumber ke SAF
+            addRecentSaf(context, uri.toString())
+            recentSaf = getRecentSaf(context)
             rootUri = uri
             suRoot = null
             load(uri)
@@ -190,18 +197,16 @@ fun RootMediaScreen() {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Button(
-                onClick = { picker.launch(null) },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Pilih Folder Root")
-            }
-
-            OutlinedButton(
-                onClick = { showSuBrowser = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Browser Superuser (/data/data)")
+            // Tombol rapi: 2 sejajar, sama lebar
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { picker.launch(null) },
+                    modifier = Modifier.weight(1f)
+                ) { Text("📂 Folder") }
+                OutlinedButton(
+                    onClick = { showSuBrowser = true },
+                    modifier = Modifier.weight(1f)
+                ) { Text("🔑 Superuser") }
             }
 
             Text(
@@ -209,16 +214,45 @@ fun RootMediaScreen() {
                     null -> "mengecek…"
                     true -> "OK (uid=0)"
                     false -> "tidak ada — HP belum root"
-                },
-                style = MaterialTheme.typography.bodySmall
-            )
-
-            Text(
-                text = sourceText,
+                } + "  •  $sourceText",
                 style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
+                maxLines = 3,
                 overflow = TextOverflow.Ellipsis
             )
+
+            // Riwayat folder — tap untuk auto-fetch tanpa pilih ulang
+            if (recentSaf.isNotEmpty() || recentSu.isNotEmpty()) {
+                Text("Terakhir:", style = MaterialTheme.typography.labelMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    lazyItems(recentSu, key = { "su:$it" }) { p ->
+                        SuggestionChip(
+                            onClick = {
+                                saveSuRoot(context, p)
+                                saveRootUriClear(context)
+                                suRoot = p
+                                rootUri = null
+                                loadSu(p)
+                            },
+                            label = { Text("🔑 ${p.takeLast(28)}") }
+                        )
+                    }
+                    lazyItems(recentSaf, key = { "saf:$it" }) { u ->
+                        SuggestionChip(
+                            onClick = {
+                                try {
+                                    val uri = Uri.parse(u)
+                                    saveRoot(context, uri)
+                                    saveSuRoot(context, null)
+                                    rootUri = uri
+                                    suRoot = null
+                                    load(uri)
+                                } catch (_: Exception) { }
+                            },
+                            label = { Text("📂 ${u.takeLast(28)}") }
+                        )
+                    }
+                }
+            }
 
             OutlinedTextField(
                 value = query,
@@ -285,6 +319,8 @@ fun RootMediaScreen() {
             onPick = { path ->
                 saveSuRoot(context, path)
                 saveRootUriClear(context)
+                addRecentSu(context, path)
+                recentSu = getRecentSu(context)
                 suRoot = path
                 rootUri = null
                 showSuBrowser = false
@@ -372,21 +408,24 @@ fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Surface(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f)
-                    )
-                    TextButton(onClick = onDismiss) { Text("Tutup") }
-                }
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopAppBar(
+                    navigationIcon = {
+                        TextButton(onClick = onDismiss) { Text("←") }
+                    },
+                    title = {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    actions = {
+                        TextButton(onClick = onDismiss) { Text("Tutup") }
+                    }
+                )
+                Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
                     text = if (item.filePath != null) "${item.filePath} • via su"
                         else "${item.mimeType ?: "-"} • ${formatSize(item.size)}",
@@ -412,6 +451,7 @@ fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
                             else -> Text("Preview tidak didukung.")
                         }
                     }
+                }
                 }
             }
         }
@@ -494,6 +534,9 @@ fun formatSize(bytes: Long): String {
 private const val PREFS = "root_app"
 private const val KEY_ROOT = "root_uri"
 private const val KEY_SU_ROOT = "su_root_path"
+private const val KEY_RECENT_SAF = "recent_saf"
+private const val KEY_RECENT_SU = "recent_su"
+private const val MAX_RECENT = 6
 
 private fun saveRoot(context: android.content.Context, uri: Uri) {
     context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
@@ -520,4 +563,30 @@ private fun saveSuRoot(context: android.content.Context, path: String?) {
 private fun loadSavedSuRoot(context: android.content.Context): String? {
     return context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
         .getString(KEY_SU_ROOT, null)
+}
+
+private fun getRecentSaf(context: android.content.Context): List<String> {
+    return context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        .getStringSet(KEY_RECENT_SAF, emptySet())?.toList() ?: emptyList()
+}
+
+private fun addRecentSaf(context: android.content.Context, uri: String) {
+    val cur = getRecentSaf(context).toMutableList()
+    cur.remove(uri)
+    cur.add(0, uri)
+    context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        .edit().putStringSet(KEY_RECENT_SAF, cur.take(MAX_RECENT).toSet()).apply()
+}
+
+private fun getRecentSu(context: android.content.Context): List<String> {
+    return context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        .getStringSet(KEY_RECENT_SU, emptySet())?.toList()?.sorted() ?: emptyList()
+}
+
+private fun addRecentSu(context: android.content.Context, path: String) {
+    val cur = getRecentSu(context).toMutableList()
+    cur.remove(path)
+    cur.add(0, path)
+    context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        .edit().putStringSet(KEY_RECENT_SU, cur.take(MAX_RECENT).toSet()).apply()
 }
