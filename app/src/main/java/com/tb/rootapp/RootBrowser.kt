@@ -51,10 +51,17 @@ fun RootBrowserDialog(
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var rooted by remember { mutableStateOf<Boolean?>(null) }
+    var browserQuery by remember { mutableStateOf("") }
+
+    val shown = remember(entries, browserQuery) {
+        if (browserQuery.isBlank()) entries
+        else entries.filter { it.name.contains(browserQuery, ignoreCase = true) }
+    }
 
     fun load(p: String) {
         loading = true
         error = null
+        browserQuery = ""
         scope.launch {
             try {
                 val list = RootHelper.ls(p)
@@ -140,13 +147,31 @@ fun RootBrowserDialog(
 
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
 
+                    OutlinedTextField(
+                        value = browserQuery,
+                        onValueChange = { browserQuery = it },
+                        label = { Text("Cari file/folder di sini…") },
+                        leadingIcon = { Text("🔍") },
+                        trailingIcon = {
+                            if (browserQuery.isNotEmpty()) {
+                                TextButton(onClick = { browserQuery = "" }) { Text("✕") }
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
                     if (loading) {
                         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
                         }
                     } else {
+                        Text(
+                            "${shown.size}/${entries.size}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
                         LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                            items(entries, key = { it.path }) { e ->
+                            items(shown, key = { it.path }) { e ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
