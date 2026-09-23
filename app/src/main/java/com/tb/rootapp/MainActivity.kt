@@ -22,6 +22,9 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -90,6 +93,7 @@ fun RootMediaScreen() {
 
     var filter by remember { mutableStateOf(MediaFilter.ALL) }
     var query by remember { mutableStateOf("") }
+    var searchActive by remember { mutableStateOf(false) }
     var debouncedQuery by remember { mutableStateOf("") }
     var visibleCount by remember { mutableStateOf(200) }
     var selected by remember { mutableStateOf<MediaItem?>(null) }
@@ -272,13 +276,48 @@ fun RootMediaScreen() {
                 }
             }
 
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                label = { Text("Cari nama file…") },
-                singleLine = true,
+            SearchBar(
+                query = query,
+                onQueryChange = { query = it },
+                onSearch = { searchActive = false },
+                active = searchActive,
+                onActiveChange = { searchActive = it },
+                placeholder = { Text("Cari nama file…") },
+                leadingIcon = {
+                    if (searchActive) {
+                        TextButton(onClick = { searchActive = false }) { Text("←") }
+                    } else {
+                        Text("🔍")
+                    }
+                },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        TextButton(onClick = { query = "" }) { Text("✕") }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth()
-            )
+            ) {
+                val suggestions = remember(media, query) {
+                    if (query.isBlank()) media.take(5)
+                    else media.filter { it.name.contains(query, ignoreCase = true) }.take(5)
+                }
+                LazyColumn {
+                    lazyItems(suggestions, key = { (it.filePath ?: it.uri.toString()) }) { s ->
+                        ListItem(
+                            headlineContent = {
+                                Text(s.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            },
+                            leadingContent = {
+                                Text(if (s.isImage) "🖼" else if (s.isVideo) "🎬" else "🎵")
+                            },
+                            modifier = Modifier.clickable {
+                                query = s.name
+                                searchActive = false
+                            }
+                        )
+                    }
+                }
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
