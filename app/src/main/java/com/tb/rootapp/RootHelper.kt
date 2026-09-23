@@ -55,6 +55,28 @@ object RootHelper {
             out.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(maxItems)
         }
 
+    /** Cari rekursif nama file/folder di bawah root (depth dibatasi agar cepat). */
+    suspend fun search(root: String, query: String, maxDepth: Int = 4, maxItems: Int = 50): List<RootEntry> =
+        withContext(Dispatchers.IO) {
+            val q = query.replace(Regex("[\"\\\\`$]"), "").take(40)
+            if (q.isBlank()) return@withContext emptyList()
+            val pattern = "*$q*"
+            val dirs = execSu(
+                "find \"$root\" -maxdepth $maxDepth -type d -iname \"$pattern\" 2>/dev/null | head -n $maxItems"
+            )?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+            val files = execSu(
+                "find \"$root\" -maxdepth $maxDepth -type f -iname \"$pattern\" 2>/dev/null | head -n $maxItems"
+            )?.lines()?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+            val out = ArrayList<RootEntry>(dirs.size + files.size)
+            dirs.take(maxItems).forEach { p ->
+                out.add(RootEntry(p.substringAfterLast('/').ifEmpty { p }, p, true))
+            }
+            files.take(maxItems).forEach { p ->
+                out.add(RootEntry(p.substringAfterLast('/').ifEmpty { p }, p, false))
+            }
+            out
+        }
+
     /** Copy file root-only ke cache app via `su -c cat`. Return true jika sukses. */
     suspend fun copyToCache(srcPath: String, dst: File): Boolean =
         withContext(Dispatchers.IO) {

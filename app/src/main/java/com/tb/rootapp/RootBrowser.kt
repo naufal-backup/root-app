@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -52,7 +53,24 @@ fun RootBrowserDialog(
     var error by remember { mutableStateOf<String?>(null) }
     var rooted by remember { mutableStateOf<Boolean?>(null) }
     var browserQuery by remember { mutableStateOf("") }
+    var searching by remember { mutableStateOf(false) }
+    var searchResults by remember { mutableStateOf<List<RootEntry>>(emptyList()) }
 
+    // cari folder + isi subfolder (debounce, depth ≤4)
+    LaunchedEffect(browserQuery, path) {
+        if (browserQuery.isBlank()) { searchResults = emptyList(); return@LaunchedEffect }
+        delay(400)
+        searching = true
+        try {
+            searchResults = RootHelper.search(path, browserQuery)
+        } catch (_: Exception) {
+            searchResults = emptyList()
+        } finally {
+            searching = false
+        }
+    }
+
+    val searchingNow = browserQuery.isNotBlank()
     val shown = remember(entries, browserQuery) {
         if (browserQuery.isBlank()) entries
         else entries.filter { it.name.contains(browserQuery, ignoreCase = true) }
@@ -150,7 +168,7 @@ fun RootBrowserDialog(
                     OutlinedTextField(
                         value = browserQuery,
                         onValueChange = { browserQuery = it },
-                        label = { Text("Cari file/folder di sini…") },
+                        label = { Text("Cari folder + isi subfolder…") },
                         leadingIcon = { Text("🔍") },
                         trailingIcon = {
                             if (browserQuery.isNotEmpty()) {
@@ -164,6 +182,46 @@ fun RootBrowserDialog(
                     if (loading) {
                         Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
+                        }
+                    } else if (searchingNow) {
+                        if (searching) {
+                            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator()
+                            }
+                        } else {
+                            Text(
+                                "Hasil di folder + subfolder (${searchResults.size}):",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                                items(searchResults, key = { it.path }) { e ->
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable(enabled = e.isDirectory) { load(e.path) }
+                                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(if (e.isDirectory) "📁" else "📄")
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = e.name,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            val rel = e.path.removePrefix(path).trimStart('/')
+                                            if (rel != e.name && rel.isNotEmpty()) {
+                                                Text(
+                                                    text = rel,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     } else {
                         Text(
