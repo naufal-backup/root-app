@@ -7,7 +7,9 @@ data class MediaItem(
     val name: String,
     val mimeType: String?,
     val size: Long,
-    val isDirectory: Boolean = false
+    val isDirectory: Boolean = false,
+    /** Path filesystem absolut untuk item via superuser (su). Null untuk item SAF. */
+    val filePath: String? = null
 ) {
     private val ext: String get() = name.substringAfterLast('.', "").lowercase()
 

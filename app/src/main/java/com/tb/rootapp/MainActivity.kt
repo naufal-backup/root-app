@@ -26,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -54,7 +55,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import com.tb.rootapp.ui.theme.RootAppTheme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,6 +78,7 @@ fun RootMediaScreen() {
     val scope = rememberCoroutineScope()
 
     var rootUri by remember { mutableStateOf<Uri?>(loadSavedRoot(context)) }
+    var suRoot by remember { mutableStateOf(loadSavedSuRoot(context)) }
     var media by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -81,6 +86,8 @@ fun RootMediaScreen() {
     var filter by remember { mutableStateOf(MediaFilter.ALL) }
     var query by remember { mutableStateOf("") }
     var selected by remember { mutableStateOf<MediaItem?>(null) }
+    var showSuBrowser by remember { mutableStateOf(false) }
+    var rooted by remember { mutableStateOf<Boolean?>(null) }
 
     fun load(uri: Uri) {
         loading = true
@@ -91,6 +98,31 @@ fun RootMediaScreen() {
                 if (media.isEmpty()) error = "Tidak ada media di folder ini."
             } catch (e: Exception) {
                 error = "Gagal baca folder: ${e.message}"
+            } finally {
+                loading = false
+            }
+        }
+    }
+
+    fun loadSu(path: String) {
+        loading = true
+        error = null
+        scope.launch {
+            try {
+                val paths = RootHelper.findMedia(path)
+                media = paths.map { p ->
+                    val f = File(p)
+                    MediaItem(
+                        uri = Uri.fromFile(f),
+                        name = f.name.ifEmpty { p.substringAfterLast('/') },
+                        mimeType = null,
+                        size = 0L,
+                        filePath = p
+                    )
+                }
+                if (media.isEmpty()) error = "Tidak ada media di $path (atau akses ditolak)."
+            } catch (e: Exception) {
+                error = "Gagal baca via su: ${e.message}"
             } finally {
                 loading = false
             }
@@ -108,13 +140,17 @@ fun RootMediaScreen() {
                 )
             } catch (_: Exception) { }
             saveRoot(context, uri)
+            saveSuRoot(context, null) // ganti sumber ke SAF
             rootUri = uri
+            suRoot = null
             load(uri)
         }
     }
 
-    LaunchedEffect(rootUri) {
-        rootUri?.let { load(it) }
+    LaunchedEffect(Unit) {
+        rooted = withContext(Dispatchers.IO) { RootHelper.isRootAvailable() }
+        // auto-load sumber terakhir
+        suRoot?.let { loadSu(it) } ?: rootUri?.let { load(it) }
     }
 
     val filtered = remember(media, filter, query) {
@@ -138,6 +174,12 @@ fun RootMediaScreen() {
         "${filtered.size}/${media.size} • 🖼 $img • 🎬 $vid • 🎵 $aud"
     }
 
+    val sourceText = when {
+        suRoot != null -> "SU Root: $suRoot"
+        rootUri != null -> "Root: ${rootUri?.path?.takeLast(60)}"
+        else -> "Belum ada folder dipilih"
+    }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("Root App — Media") }) }
     ) { padding ->
@@ -155,8 +197,24 @@ fun RootMediaScreen() {
                 Text("Pilih Folder Root")
             }
 
+            OutlinedButton(
+                onClick = { showSuBrowser = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Browser Superuser (/data/data)")
+            }
+
             Text(
-                text = rootUri?.let { "Root: ${it.path?.takeLast(60)}" } ?: "Belum ada folder dipilih",
+                text = "Akses root: " + when (rooted) {
+                    null -> "mengecek…"
+                    true -> "OK (uid=0)"
+                    false -> "tidak ada — HP belum root"
+                },
+                style = MaterialTheme.typography.bodySmall
+            )
+
+            Text(
+                text = sourceText,
                 style = MaterialTheme.typography.bodySmall,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
@@ -203,7 +261,7 @@ fun RootMediaScreen() {
                     CircularProgressIndicator()
                 }
                 filtered.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(if (media.isEmpty()) "Belum ada media. Pilih folder root dulu."
+                    Text(if (media.isEmpty()) "Belum ada media. Pilih folder root / browser superuser."
                         else "Tidak cocok dengan filter/pencarian.")
                 }
                 else -> LazyVerticalGrid(
@@ -213,12 +271,27 @@ fun RootMediaScreen() {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filtered, key = { it.uri.toString() }) { item ->
+                    items(filtered, key = { (it.filePath ?: it.uri.toString()) }) { item ->
                         MediaCard(item, onClick = { selected = item })
                     }
                 }
             }
         }
+    }
+
+    if (showSuBrowser) {
+        RootBrowserDialog(
+            initialPath = suRoot ?: "/data/data",
+            onPick = { path ->
+                saveSuRoot(context, path)
+                saveRootUriClear(context)
+                suRoot = path
+                rootUri = null
+                showSuBrowser = false
+                loadSu(path)
+            },
+            onDismiss = { showSuBrowser = false }
+        )
     }
 
     selected?.let { item ->
@@ -230,29 +303,39 @@ fun RootMediaScreen() {
 fun MediaCard(item: MediaItem, onClick: () -> Unit) {
     Card(modifier = Modifier.clickable(onClick = onClick)) {
         Column {
-            Box {
-                if (item.isImage) {
-                    AsyncImage(
-                        model = item.uri,
-                        contentDescription = item.name,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
+            // Item superuser belum tentu bisa dibaca langsung → tampilkan ikon, copy saat preview
+            if (item.filePath != null) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        when {
+                            item.isImage -> "🖼"
+                            item.isVideo -> "🎬"
+                            item.isAudio -> "🎵"
+                            else -> "📄"
+                        },
+                        style = MaterialTheme.typography.headlineMedium
                     )
-                } else if (item.isVideo) {
+                }
+            } else if (item.isImage) {
+                AsyncImage(
+                    model = item.uri,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+                )
+            } else if (item.isVideo) {
+                Box {
                     AsyncImage(
                         model = item.uri,
                         contentDescription = item.name,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
+                        modifier = Modifier.fillMaxWidth().aspectRatio(1f)
                     )
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
+                        modifier = Modifier.fillMaxWidth().aspectRatio(1f),
                         contentAlignment = Alignment.Center
                     ) {
                         Surface(
@@ -262,15 +345,13 @@ fun MediaCard(item: MediaItem, onClick: () -> Unit) {
                             Text("▶", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
                         }
                     }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(if (item.isAudio) "♪" else "📄")
-                    }
+                }
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(if (item.isAudio) "♪" else "📄")
                 }
             }
             Text(
@@ -307,26 +388,73 @@ fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
                     TextButton(onClick = onDismiss) { Text("Tutup") }
                 }
                 Text(
-                    text = "${item.mimeType ?: "-"} • ${formatSize(item.size)}",
-                    style = MaterialTheme.typography.bodySmall
+                    text = if (item.filePath != null) "${item.filePath} • via su"
+                        else "${item.mimeType ?: "-"} • ${formatSize(item.size)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Box(
                     modifier = Modifier.fillMaxSize().padding(top = 12.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    when {
-                        item.isImage -> AsyncImage(
-                            model = item.uri,
-                            contentDescription = item.name,
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        item.isVideo || item.isAudio -> VideoPlayer(uri = item.uri)
-                        else -> Text("Preview tidak didukung.")
+                    if (item.filePath != null) {
+                        SuPreviewContent(item = item)
+                    } else {
+                        when {
+                            item.isImage -> AsyncImage(
+                                model = item.uri,
+                                contentDescription = item.name,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                            item.isVideo || item.isAudio -> VideoPlayer(uri = item.uri)
+                            else -> Text("Preview tidak didukung.")
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+/** Preview file root-only: copy via `su -c cat` ke cache lalu tampilkan. */
+@Composable
+fun SuPreviewContent(item: MediaItem) {
+    val context = LocalContext.current
+    var cachedUri by remember(item) { mutableStateOf<Uri?>(null) }
+    var suError by remember(item) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(item) {
+        cachedUri = null
+        suError = null
+        try {
+            val src = item.filePath ?: return@LaunchedEffect
+            val safeName = File(src).name.ifEmpty { "preview" }.takeLast(60)
+                .replace(Regex("[^A-Za-z0-9._-]"), "_")
+            val dst = File(context.cacheDir, "su_preview/$safeName")
+            val ok = withContext(Dispatchers.IO) { RootHelper.copyToCache(src, dst) }
+            if (ok) cachedUri = Uri.fromFile(dst)
+            else suError = "Gagal baca via su — pastikan HP rooted & akses root diizinkan."
+        } catch (e: Exception) {
+            suError = "Gagal: ${e.message}"
+        }
+    }
+
+    when {
+        suError != null -> Text(
+            suError!!,
+            color = MaterialTheme.colorScheme.error
+        )
+        cachedUri == null -> CircularProgressIndicator()
+        item.isImage -> AsyncImage(
+            model = cachedUri,
+            contentDescription = item.name,
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize()
+        )
+        item.isVideo || item.isAudio -> VideoPlayer(uri = cachedUri!!)
+        else -> Text("Preview tidak didukung.")
     }
 }
 
@@ -365,14 +493,31 @@ fun formatSize(bytes: Long): String {
 
 private const val PREFS = "root_app"
 private const val KEY_ROOT = "root_uri"
+private const val KEY_SU_ROOT = "su_root_path"
 
 private fun saveRoot(context: android.content.Context, uri: Uri) {
     context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
         .edit().putString(KEY_ROOT, uri.toString()).apply()
 }
 
+private fun saveRootUriClear(context: android.content.Context) {
+    context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        .edit().remove(KEY_ROOT).apply()
+}
+
 private fun loadSavedRoot(context: android.content.Context): Uri? {
     val s = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
         .getString(KEY_ROOT, null) ?: return null
     return try { Uri.parse(s) } catch (_: Exception) { null }
+}
+
+private fun saveSuRoot(context: android.content.Context, path: String?) {
+    val e = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE).edit()
+    if (path == null) e.remove(KEY_SU_ROOT) else e.putString(KEY_SU_ROOT, path)
+    e.apply()
+}
+
+private fun loadSavedSuRoot(context: android.content.Context): String? {
+    return context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
+        .getString(KEY_SU_ROOT, null)
 }
