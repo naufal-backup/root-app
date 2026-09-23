@@ -57,8 +57,10 @@ import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.tb.rootapp.ui.theme.RootAppTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -88,15 +90,27 @@ fun RootMediaScreen() {
 
     var filter by remember { mutableStateOf(MediaFilter.ALL) }
     var query by remember { mutableStateOf("") }
+    var debouncedQuery by remember { mutableStateOf("") }
+    var visibleCount by remember { mutableStateOf(200) }
     var selected by remember { mutableStateOf<MediaItem?>(null) }
     var showSuBrowser by remember { mutableStateOf(false) }
     var rooted by remember { mutableStateOf<Boolean?>(null) }
     var recentSaf by remember { mutableStateOf(getRecentSaf(context)) }
     var recentSu by remember { mutableStateOf(getRecentSu(context)) }
 
+    // debounce ketikan agar grid tidak recompute tiap huruf
+    LaunchedEffect(query) {
+        delay(300)
+        debouncedQuery = query
+        visibleCount = 200
+    }
+    LaunchedEffect(filter) { visibleCount = 200 }
+
     fun load(uri: Uri) {
+        if (loading) return
         loading = true
         error = null
+        visibleCount = 200
         scope.launch {
             try {
                 media = MediaRepository.fetchFromRoot(context, uri)
@@ -110,8 +124,10 @@ fun RootMediaScreen() {
     }
 
     fun loadSu(path: String) {
+        if (loading) return
         loading = true
         error = null
+        visibleCount = 200
         scope.launch {
             try {
                 val paths = RootHelper.findMedia(path)
@@ -156,11 +172,11 @@ fun RootMediaScreen() {
 
     LaunchedEffect(Unit) {
         rooted = withContext(Dispatchers.IO) { RootHelper.isRootAvailable() }
-        // auto-load sumber terakhir
+        // auto-load sumber terakhir — sekali saja (hindari double scan)
         suRoot?.let { loadSu(it) } ?: rootUri?.let { load(it) }
     }
 
-    val filtered = remember(media, filter, query) {
+    val filtered = remember(media, filter, debouncedQuery) {
         media.filter {
             val matchFilter = when (filter) {
                 MediaFilter.ALL -> true
@@ -168,11 +184,13 @@ fun RootMediaScreen() {
                 MediaFilter.VIDEO -> it.isVideo
                 MediaFilter.AUDIO -> it.isAudio
             }
-            val matchQuery = query.isBlank() ||
-                it.name.contains(query, ignoreCase = true)
+            val matchQuery = debouncedQuery.isBlank() ||
+                it.name.contains(debouncedQuery, ignoreCase = true)
             matchFilter && matchQuery
         }
     }
+    // pagination: render bertahap agar grid tidak macet di ribuan item
+    val visible = remember(filtered, visibleCount) { filtered.take(visibleCount) }
 
     val countText = remember(media, filtered) {
         val img = media.count { it.isImage }
@@ -305,8 +323,20 @@ fun RootMediaScreen() {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filtered, key = { (it.filePath ?: it.uri.toString()) }) { item ->
+                    items(
+                        visible,
+                        key = { (it.filePath ?: it.uri.toString()) },
+                        contentType = { if (it.isVideo) "v" else if (it.isAudio) "a" else "i" }
+                    ) { item ->
                         MediaCard(item, onClick = { selected = item })
+                    }
+                    if (visibleCount < filtered.size) {
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(3) }) {
+                            OutlinedButton(
+                                onClick = { visibleCount += 300 },
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            ) { Text("Muat 300 lagi (sisa ${filtered.size - visibleCount})") }
+                        }
                     }
                 }
             }
@@ -337,6 +367,15 @@ fun RootMediaScreen() {
 
 @Composable
 fun MediaCard(item: MediaItem, onClick: () -> Unit) {
+    val context = LocalContext.current
+    // thumbnail kecil (300px) agar scroll grid tidak lag
+    val thumb = remember(item) {
+        ImageRequest.Builder(context)
+            .data(item.uri)
+            .size(300)
+            .crossfade(false)
+            .build()
+    }
     Card(modifier = Modifier.clickable(onClick = onClick)) {
         Column {
             // Item superuser belum tentu bisa dibaca langsung → tampilkan ikon, copy saat preview
@@ -357,7 +396,7 @@ fun MediaCard(item: MediaItem, onClick: () -> Unit) {
                 }
             } else if (item.isImage) {
                 AsyncImage(
-                    model = item.uri,
+                    model = thumb,
                     contentDescription = item.name,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxWidth().aspectRatio(1f)
@@ -365,7 +404,7 @@ fun MediaCard(item: MediaItem, onClick: () -> Unit) {
             } else if (item.isVideo) {
                 Box {
                     AsyncImage(
-                        model = item.uri,
+                        model = thumb,
                         contentDescription = item.name,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxWidth().aspectRatio(1f)

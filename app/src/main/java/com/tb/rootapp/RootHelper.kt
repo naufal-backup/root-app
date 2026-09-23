@@ -41,7 +41,7 @@ object RootHelper {
             .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
     }
 
-    suspend fun findMedia(root: String, maxItems: Int = 2000): List<String> =
+    suspend fun findMedia(root: String, maxItems: Int = 1200): List<String> =
         withContext(Dispatchers.IO) {
             val cmd = "find \"$root\" -type f \\( " +
                 "-iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o " +
