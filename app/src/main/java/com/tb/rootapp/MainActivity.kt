@@ -401,6 +401,7 @@ fun MediaCard(item: MediaItem, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
     Dialog(
