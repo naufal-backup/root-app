@@ -21,8 +21,8 @@ jobs:
 
       - name: Install Android platform + build-tools
         run: |
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
           echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
           sdkmanager --install "platforms;android-34" "build-tools;34.0.0" "platform-tools"
           yes | sdkmanager --licenses || true
 
