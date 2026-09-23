@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Root App</string>
+    <string name="pick_folder">Pilih Folder Root</string>
+    <string name="empty_media">Belum ada media. Pilih folder root dulu.</string>
+    <string name="loading">Memuat media…</string>
+</resources>
