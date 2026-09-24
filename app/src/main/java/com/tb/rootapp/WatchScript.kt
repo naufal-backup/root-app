@@ -1,6 +1,7 @@
 package com.tb.rootapp
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 /**
@@ -54,23 +55,26 @@ object WatchScript {
         withContext(Dispatchers.IO) {
             try {
                 val script = build(src, dst, intervalSec, chattr)
-                val wrapped =
-                    "nsenter -t \$(pidof system_server) -m -- sh -c 'cat > $PATH && chmod 755 $PATH'"
-                val p = Runtime.getRuntime().exec(arrayOf("su", "-c", wrapped))
-                p.outputStream.use { it.write(script.toByteArray()) }
-                if (p.waitFor(15, java.util.concurrent.TimeUnit.MILLISECONDS) && p.exitValue() == 0) {
-                    RootHelper.execSuPublic("nohup $PATH >/dev/null 2>&1 &")
-                    true
-                } else {
-                    // fallback tanpa nsenter
-                    val p2 = Runtime.getRuntime().exec(
-                        arrayOf("su", "-c", "cat > $PATH && chmod 755 $PATH")
-                    )
-                    p2.outputStream.use { it.write(script.toByteArray()) }
-                    val ok = p2.waitFor(15, java.util.concurrent.TimeUnit.MILLISECONDS) && p2.exitValue() == 0
-                    if (ok) RootHelper.execSuPublic("nohup $PATH >/dev/null 2>&1 &")
-                    ok
+                val writers = listOf(
+                    "nsenter -t \$(pidof system_server) -m -- sh -c 'cat > $PATH && chmod 755 $PATH'",
+                    "cat > $PATH && chmod 755 $PATH"
+                )
+                var written = false
+                for (w in writers) {
+                    try {
+                        val p = Runtime.getRuntime().exec(arrayOf("su", "-c", w))
+                        p.outputStream.use { it.write(script.toByteArray()) }
+                        val done = p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+                        if (done && p.exitValue() == 0 && RootHelper.suExists(PATH)) {
+                            written = true
+                            break
+                        }
+                    } catch (_: Exception) { }
                 }
+                if (!written) return@withContext false
+                RootHelper.execSuPublic("nohup $PATH >/dev/null 2>&1 &")
+                delay(1500)
+                isRunning()
             } catch (_: Exception) {
                 false
             }
