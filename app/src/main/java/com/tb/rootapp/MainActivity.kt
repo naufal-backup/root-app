@@ -344,6 +344,7 @@ fun RootMediaScreen() {
                     }
                 }
             }
+            }
 
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
