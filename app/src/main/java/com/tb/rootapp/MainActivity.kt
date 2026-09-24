@@ -509,6 +509,7 @@ fun RootMediaScreen() {
                 }
             }
         }
+        }
     }
 
     selected?.let { item ->
