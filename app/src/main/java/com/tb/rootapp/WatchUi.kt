@@ -202,6 +202,7 @@ fun WatchCard() {
  */
 @Composable
 fun ScriptSection(cfg: WatchStore.Config) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var installed by remember { mutableStateOf<Boolean?>(null) }
     var running by remember { mutableStateOf<Boolean?>(null) }
