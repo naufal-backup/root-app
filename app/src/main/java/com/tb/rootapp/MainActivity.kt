@@ -276,6 +276,8 @@ fun RootMediaScreen() {
                 }
             }
 
+            WatchCard()
+
             SearchBar(
                 query = query,
                 onQueryChange = { query = it },

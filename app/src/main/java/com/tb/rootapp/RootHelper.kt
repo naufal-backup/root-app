@@ -87,6 +87,30 @@ object RootHelper {
             out
         }
 
+    /** Copy via cp (root). -n = jangan timpa. Return true jika dst ada & >0. */
+    suspend fun suCopy(src: String, dst: String): Boolean =
+        withContext(Dispatchers.IO) {
+            val q = { s: String -> "\"" + s.replace("\"", "\\\"") + "\"" }
+            execSu("cp -n ${q(src)} ${q(dst)}")
+            execSu("test -s ${q(dst)} && echo OK")?.contains("OK") == true
+        }
+
+    suspend fun suMkdir(path: String): Boolean =
+        withContext(Dispatchers.IO) {
+            execSu("mkdir -p \"$path\"") != null
+        }
+
+    suspend fun suExists(path: String): Boolean =
+        withContext(Dispatchers.IO) {
+            execSu("test -e \"$path\" && echo ADA")?.contains("ADA") == true
+        }
+
+    /** Kunci file agar tak bisa dihapus (tetap bisa tambah file baru di dir). */
+    suspend fun suChattrImmutable(path: String): Boolean =
+        withContext(Dispatchers.IO) {
+            execSu("chattr +i \"$path\"") != null
+        }
+
     /**
      * Copy file root-only ke cache app.
      * `su -c cat` jalan di namespace system_server; redirection di sisi app.
