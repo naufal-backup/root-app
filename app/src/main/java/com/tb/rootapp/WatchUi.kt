@@ -153,6 +153,8 @@ fun WatchCard() {
             )
             msg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 
+            ScriptSection(cfg)
+
             if (logs.isNotEmpty()) {
                 Text("Log:", style = MaterialTheme.typography.labelMedium)
                 logs.takeLast(5).forEach { line ->
@@ -186,5 +188,88 @@ fun WatchCard() {
             },
             onDismiss = { pickingDst = false }
         )
+    }
+}
+
+/**
+ * Script root permanen di /data/adb/service.d:
+ * jalan saat boot & tetap hidup walau app ditutup total.
+ */
+@Composable
+fun ScriptSection(cfg: WatchStore.Config) {
+    val scope = rememberCoroutineScope()
+    var installed by remember { mutableStateOf<Boolean?>(null) }
+    var running by remember { mutableStateOf<Boolean?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var msg by remember { mutableStateOf<String?>(null) }
+
+    fun refresh() {
+        scope.launch {
+            installed = WatchScript.isInstalled()
+            running = if (installed == true) WatchScript.isRunning() else false
+        }
+    }
+
+    LaunchedEffect(Unit) { refresh() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Mode permanen (script root):", style = MaterialTheme.typography.labelMedium)
+        Text(
+            "Script: " + when (installed) {
+                null -> "mengecek…"
+                true -> "terpasang"
+                false -> "belum dipasang"
+            } + " • " + when (running) {
+                null -> ""
+                true -> "JALAN walau app ditutup"
+                false -> "berhenti"
+            },
+            style = MaterialTheme.typography.bodySmall
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    busy = true
+                    msg = null
+                    scope.launch {
+                        val ok = WatchScript.installAndStart(
+                            cfg.src, cfg.dst, cfg.intervalSec, cfg.chattr
+                        )
+                        msg = if (ok) "Script dipasang + jalan." else "Gagal — butuh root + Magisk."
+                        refresh()
+                        busy = false
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.weight(1f)
+            ) { Text("⚙ Pasang + jalan") }
+            OutlinedButton(
+                onClick = {
+                    busy = true
+                    scope.launch {
+                        WatchScript.stop()
+                        refresh()
+                        msg = "Script dihentikan."
+                        busy = false
+                    }
+                },
+                enabled = !busy,
+                modifier = Modifier.weight(1f)
+            ) { Text("⏹ Stop") }
+        }
+        OutlinedButton(
+            onClick = {
+                busy = true
+                scope.launch {
+                    val ok = WatchScript.uninstall()
+                    msg = if (ok) "Script dihapus." else "Gagal hapus."
+                    refresh()
+                    busy = false
+                }
+            },
+            enabled = !busy,
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("🗑 Hapus script permanen") }
+        msg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }

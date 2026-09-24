@@ -178,6 +178,10 @@ object RootHelper {
         return runSu(wrapNs(cmd), timeoutMs) ?: runSu(cmd, timeoutMs)
     }
 
+    /** Versi publik untuk kebutuhan internal fitur lain. */
+    suspend fun execSuPublic(cmd: String, timeoutMs: Long = 15_000): String? =
+        withContext(Dispatchers.IO) { execSu(cmd, timeoutMs) }
+
     private fun runSu(shellCmd: String, timeoutMs: Long): String? {
         return try {
             val p = Runtime.getRuntime().exec(arrayOf("su", "-c", shellCmd))

@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyRow
@@ -63,7 +64,7 @@ import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import coil.ImageLoader
-import coil.video.VideoFrameDecoder
+import coil.decode.VideoFrameDecoder
 import com.tb.rootapp.ui.theme.RootAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -222,40 +223,49 @@ fun RootMediaScreen() {
     Scaffold(
         topBar = { TopAppBar(title = { Text("Root App — Media") }) }
     ) { padding ->
-        Column(
+        // Satu container scroll: header span penuh, media jadi sel grid
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(3),
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Tombol rapi: 2 sejajar, sama lebar
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    onClick = { picker.launch(null) },
-                    modifier = Modifier.weight(1f)
-                ) { Text("📂 Folder") }
-                OutlinedButton(
-                    onClick = { showSuBrowser = true },
-                    modifier = Modifier.weight(1f)
-                ) { Text("🔑 Superuser") }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = { picker.launch(null) },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("📂 Folder") }
+                    OutlinedButton(
+                        onClick = { showSuBrowser = true },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("🔑 Superuser") }
+                }
             }
 
-            Text(
-                text = "Akses root: " + when (rooted) {
-                    null -> "mengecek…"
-                    true -> "OK (uid=0)"
-                    false -> "tidak ada — HP belum root"
-                } + "  •  $sourceText",
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(
+                    text = "Akses root: " + when (rooted) {
+                        null -> "mengecek…"
+                        true -> "OK (uid=0)"
+                        false -> "tidak ada — HP belum root"
+                    } + "  •  $sourceText",
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
             // Riwayat folder — tap untuk auto-fetch tanpa pilih ulang
             if (recentSaf.isNotEmpty() || recentSu.isNotEmpty()) {
-                Text("Terakhir:", style = MaterialTheme.typography.labelMedium)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item(span = { GridItemSpan(maxLineSpan) }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("Terakhir:", style = MaterialTheme.typography.labelMedium)
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     lazyItems(recentSu, key = { "su:$it" }) { p ->
                         SuggestionChip(
                             onClick = {
@@ -283,12 +293,15 @@ fun RootMediaScreen() {
                             label = { Text("📂 ${u.takeLast(28)}") }
                         )
                     }
+                        }
+                    }
                 }
             }
 
-            WatchCard()
+            item(span = { GridItemSpan(maxLineSpan) }) { WatchCard() }
 
-            SearchBar(
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                SearchBar(
                 query = query,
                 onQueryChange = { query = it },
                 onSearch = { searchActive = false },
@@ -313,8 +326,9 @@ fun RootMediaScreen() {
                     if (query.isBlank()) media.take(5)
                     else media.filter { it.name.contains(query, ignoreCase = true) }.take(5)
                 }
-                LazyColumn {
-                    lazyItems(suggestions, key = { (it.filePath ?: it.uri.toString()) }) { s ->
+                // Column biasa (bukan Lazy) agar aman di dalam item grid
+                Column {
+                    suggestions.forEach { s ->
                         ListItem(
                             headlineContent = {
                                 Text(s.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -331,49 +345,60 @@ fun RootMediaScreen() {
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
-                    selected = filter == MediaFilter.ALL,
-                    onClick = { filter = MediaFilter.ALL },
-                    label = { Text("Semua") }
-                )
-                FilterChip(
-                    selected = filter == MediaFilter.IMAGE,
-                    onClick = { filter = MediaFilter.IMAGE },
-                    label = { Text("Gambar") }
-                )
-                FilterChip(
-                    selected = filter == MediaFilter.VIDEO,
-                    onClick = { filter = MediaFilter.VIDEO },
-                    label = { Text("Video") }
-                )
-                FilterChip(
-                    selected = filter == MediaFilter.AUDIO,
-                    onClick = { filter = MediaFilter.AUDIO },
-                    label = { Text("Audio") }
-                )
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = filter == MediaFilter.ALL,
+                        onClick = { filter = MediaFilter.ALL },
+                        label = { Text("Semua") }
+                    )
+                    FilterChip(
+                        selected = filter == MediaFilter.IMAGE,
+                        onClick = { filter = MediaFilter.IMAGE },
+                        label = { Text("Gambar") }
+                    )
+                    FilterChip(
+                        selected = filter == MediaFilter.VIDEO,
+                        onClick = { filter = MediaFilter.VIDEO },
+                        label = { Text("Video") }
+                    )
+                    FilterChip(
+                        selected = filter == MediaFilter.AUDIO,
+                        onClick = { filter = MediaFilter.AUDIO },
+                        label = { Text("Audio") }
+                    )
+                }
             }
 
-            Text(text = if (loading) "Memuat media…" else countText,
-                style = MaterialTheme.typography.bodyMedium)
-
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column {
+                    Text(
+                        text = if (loading) "Memuat media…" else countText,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            }
 
             when {
-                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+                loading -> item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) { CircularProgressIndicator() }
                 }
-                filtered.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(if (media.isEmpty()) "Belum ada media. Pilih folder root / browser superuser."
-                        else "Tidak cocok dengan filter/pencarian.")
+                filtered.isEmpty() -> item(span = { GridItemSpan(maxLineSpan) }) {
+                    Box(
+                        Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (media.isEmpty()) "Belum ada media. Pilih folder root / browser superuser."
+                            else "Tidak cocok dengan filter/pencarian."
+                        )
+                    }
                 }
-                else -> LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
-                    contentPadding = PaddingValues(4.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
+                else -> {
                     items(
                         visible,
                         key = { (it.filePath ?: it.uri.toString()) },
@@ -382,7 +407,7 @@ fun RootMediaScreen() {
                         MediaCard(item, videoLoader, onClick = { selected = item })
                     }
                     if (visibleCount < filtered.size) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(3) }) {
+                        item(span = { GridItemSpan(maxLineSpan) }) {
                             OutlinedButton(
                                 onClick = { visibleCount += 300 },
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
