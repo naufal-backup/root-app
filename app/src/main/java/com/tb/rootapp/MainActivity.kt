@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -61,6 +62,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import coil.ImageLoader
+import coil.video.VideoFrameDecoder
 import com.tb.rootapp.ui.theme.RootAppTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -207,6 +210,13 @@ fun RootMediaScreen() {
         suRoot != null -> "SU Root: $suRoot"
         rootUri != null -> "Root: ${rootUri?.path?.takeLast(60)}"
         else -> "Belum ada folder dipilih"
+    }
+
+    // Loader Coil + decoder frame video (untuk thumbnail superuser)
+    val videoLoader = remember {
+        ImageLoader.Builder(context)
+            .components { add(VideoFrameDecoder.Factory()) }
+            .build()
     }
 
     Scaffold(
@@ -369,7 +379,7 @@ fun RootMediaScreen() {
                         key = { (it.filePath ?: it.uri.toString()) },
                         contentType = { if (it.isVideo) "v" else if (it.isAudio) "a" else "i" }
                     ) { item ->
-                        MediaCard(item, onClick = { selected = item })
+                        MediaCard(item, videoLoader, onClick = { selected = item })
                     }
                     if (visibleCount < filtered.size) {
                         item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(3) }) {
@@ -407,7 +417,7 @@ fun RootMediaScreen() {
 }
 
 @Composable
-fun MediaCard(item: MediaItem, onClick: () -> Unit) {
+fun MediaCard(item: MediaItem, imageLoader: ImageLoader, onClick: () -> Unit) {
     val context = LocalContext.current
     // thumbnail kecil (300px) agar scroll grid tidak lag
     val thumb = remember(item) {
@@ -419,21 +429,15 @@ fun MediaCard(item: MediaItem, onClick: () -> Unit) {
     }
     Card(modifier = Modifier.clickable(onClick = onClick)) {
         Column {
-            // Item superuser belum tentu bisa dibaca langsung → tampilkan ikon, copy saat preview
-            if (item.filePath != null) {
+            // Item superuser: thumbnail asli via cache (bukan ikon)
+            if (item.filePath != null && (item.isImage || item.isVideo)) {
+                SuThumb(item = item, imageLoader = imageLoader)
+            } else if (item.filePath != null) {
                 Box(
                     modifier = Modifier.fillMaxWidth().aspectRatio(1f),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        when {
-                            item.isImage -> "🖼"
-                            item.isVideo -> "🎬"
-                            item.isAudio -> "🎵"
-                            else -> "📄"
-                        },
-                        style = MaterialTheme.typography.headlineMedium
-                    )
+                    Text("🎵", style = MaterialTheme.typography.headlineMedium)
                 }
             } else if (item.isImage) {
                 AsyncImage(
@@ -476,6 +480,73 @@ fun MediaCard(item: MediaItem, onClick: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.labelSmall,
                 modifier = Modifier.padding(6.dp)
+            )
+        }
+    }
+}
+
+/** Thumbnail asli untuk file superuser: copy sekali ke cache lalu tampilkan. */
+@Composable
+fun SuThumb(item: MediaItem, imageLoader: ImageLoader) {
+    val context = LocalContext.current
+    var file by remember(item) { mutableStateOf<java.io.File?>(null) }
+    var done by remember(item) { mutableStateOf(false) }
+
+    LaunchedEffect(item) {
+        done = false
+        file = withContext(Dispatchers.IO) {
+            item.filePath?.let { RootHelper.thumbFor(it, context.cacheDir) }
+        }
+        done = true
+    }
+
+    when {
+        !done -> Box(
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+            contentAlignment = Alignment.Center
+        ) { CircularProgressIndicator(modifier = Modifier.size(24.dp)) }
+        file != null && item.isImage -> {
+            val req = remember(file) {
+                ImageRequest.Builder(context)
+                    .data(file)
+                    .size(300)
+                    .crossfade(false)
+                    .build()
+            }
+            AsyncImage(
+                model = req,
+                contentDescription = item.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+            )
+        }
+        file != null && item.isVideo -> Box {
+            AsyncImage(
+                model = file,
+                imageLoader = imageLoader,
+                contentDescription = item.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+            )
+            Box(
+                modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = MaterialTheme.shapes.small,
+                    color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.6f)
+                ) {
+                    Text("▶", modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
+                }
+            }
+        }
+        else -> Box(
+            modifier = Modifier.fillMaxWidth().aspectRatio(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                if (item.isAudio) "🎵" else "📄",
+                style = MaterialTheme.typography.headlineMedium
             )
         }
     }

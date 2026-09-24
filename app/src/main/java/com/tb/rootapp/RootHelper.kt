@@ -1,6 +1,8 @@
 package com.tb.rootapp
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
@@ -85,6 +87,29 @@ object RootHelper {
                 out.add(RootEntry(p.substringAfterLast('/').ifEmpty { p }, p, false))
             }
             out
+        }
+
+    /** Batasi copy thumbnail bersamaan agar su tidak diserbu 200 proses. */
+    private val thumbSlots = Semaphore(3)
+
+    /**
+     * Thumbnail untuk file root-only: copy sekali ke cache, pakai ulang.
+     * Return file cache atau null jika gagal.
+     */
+    suspend fun thumbFor(srcPath: String, cacheDir: File): File? =
+        withContext(Dispatchers.IO) {
+            try {
+                val name = srcPath.substringAfterLast('/').ifEmpty { "f" }.takeLast(50)
+                    .replace(Regex("[^A-Za-z0-9._-]"), "_")
+                val dst = File(cacheDir, "su_thumbs/${srcPath.hashCode()}_$name")
+                if (dst.exists() && dst.length() > 0) return@withContext dst
+                thumbSlots.withPermit {
+                    if (dst.exists() && dst.length() > 0) return@withPermit dst
+                    if (copyToCache(srcPath, dst)) dst else null
+                }
+            } catch (_: Exception) {
+                null
+            }
         }
 
     /** Copy via cp (root). -n = jangan timpa. Return true jika dst ada & >0. */
