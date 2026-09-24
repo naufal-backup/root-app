@@ -15,8 +15,8 @@ object WatchStore {
 
     data class Config(
         val enabled: Boolean = false,
-        val src: String = "/data/data/com.whatsapp/files/ViewOnce",
-        val dst: String = "/sdcard/ViewOnceSaved",
+        val src: String = AppConfig.DEFAULT_WATCH_SRC,
+        val dst: String = AppConfig.DEFAULT_WATCH_DST,
         val intervalSec: Int = 3,
         val chattr: Boolean = true
     )
@@ -25,10 +25,10 @@ object WatchStore {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return Config(
             enabled = p.getBoolean(K_ENABLED, false),
-            src = p.getString(K_SRC, "/data/data/com.whatsapp/files/ViewOnce")
-                ?: "/data/data/com.whatsapp/files/ViewOnce",
-            dst = p.getString(K_DST, "/sdcard/ViewOnceSaved") ?: "/sdcard/ViewOnceSaved",
-            intervalSec = p.getInt(K_INTERVAL, 3).coerceIn(2, 60),
+            src = p.getString(K_SRC, AppConfig.DEFAULT_WATCH_SRC)
+                ?: AppConfig.DEFAULT_WATCH_SRC,
+            dst = p.getString(K_DST, AppConfig.DEFAULT_WATCH_DST) ?: AppConfig.DEFAULT_WATCH_DST,
+            intervalSec = p.getInt(K_INTERVAL, AppConfig.DEFAULT_WATCH_INTERVAL).coerceIn(AppConfig.MIN_WATCH_INTERVAL, AppConfig.MAX_WATCH_INTERVAL),
             chattr = p.getBoolean(K_CHATTR, true)
         )
     }
@@ -60,7 +60,7 @@ object WatchStore {
         val cur = p.getStringSet(K_KNOWN, emptySet())?.toMutableSet() ?: mutableSetOf()
         cur.addAll(names)
         // batasi agar prefs tidak membengkak
-        val trimmed = if (cur.size > 2000) cur.toList().takeLast(2000).toSet() else cur
+        val trimmed = if (cur.size > AppConfig.MAX_KNOWN_WATCH) cur.toList().takeLast(AppConfig.MAX_KNOWN_WATCH).toSet() else cur
         p.edit().putStringSet(K_KNOWN, trimmed).apply()
     }
 

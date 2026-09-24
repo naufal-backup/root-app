@@ -9,8 +9,8 @@ import kotlinx.coroutines.withContext
  * tetap hidup walau app ditutup / force-stop.
  */
 object WatchScript {
-    const val NAME = "zzz_rootapp_watch.sh"
-    const val PATH = "/data/adb/service.d/$NAME"
+    const val NAME = AppConfig.SCRIPT_NAME
+    const val PATH = "/data/adb/service.d/" + AppConfig.SCRIPT_NAME
 
     fun build(src: String, dst: String, intervalSec: Int, chattr: Boolean): String {
         // Kutip ganda di-escape agar aman disuntik ke shell
@@ -64,7 +64,7 @@ object WatchScript {
                     try {
                         val p = Runtime.getRuntime().exec(arrayOf("su", "-c", w))
                         p.outputStream.use { it.write(script.toByteArray()) }
-                        val done = p.waitFor(30, java.util.concurrent.TimeUnit.SECONDS)
+                        val done = p.waitFor(AppConfig.SCRIPT_WRITE_TIMEOUT_SEC, java.util.concurrent.TimeUnit.SECONDS)
                         if (done && p.exitValue() == 0 && RootHelper.suExists(PATH)) {
                             written = true
                             break

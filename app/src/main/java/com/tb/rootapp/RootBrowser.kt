@@ -29,6 +29,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -41,9 +42,30 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RootBrowserDialog(
-    initialPath: String = "/data/data",
+    initialPath: String = AppConfig.DEFAULT_SU_PATH,
     onPick: (String) -> Unit,
     onDismiss: () -> Unit
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            RootBrowserContent(
+                initialPath = initialPath,
+                onPick = onPick,
+                onClose = onDismiss
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RootBrowserContent(
+    initialPath: String = AppConfig.DEFAULT_SU_PATH,
+    onPick: (String) -> Unit,
+    onClose: (() -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     var path by remember { mutableStateOf(initialPath) }
@@ -56,10 +78,10 @@ fun RootBrowserDialog(
     var searching by remember { mutableStateOf(false) }
     var searchResults by remember { mutableStateOf<List<RootEntry>>(emptyList()) }
 
-    // cari folder + isi subfolder (debounce, depth ≤4)
+    // cari folder + isi subfolder (debounce)
     LaunchedEffect(browserQuery, path) {
         if (browserQuery.isBlank()) { searchResults = emptyList(); return@LaunchedEffect }
-        delay(400)
+        delay(AppConfig.BROWSER_SEARCH_DEBOUNCE_MS)
         searching = true
         try {
             searchResults = RootHelper.search(path, browserQuery)
@@ -76,6 +98,10 @@ fun RootBrowserDialog(
         else entries.filter { it.name.contains(browserQuery, ignoreCase = true) }
     }
 
+    // Template format (stringResource tak bisa dipanggil dari dalam launch)
+    val emptyTemplate = stringResource(R.string.browser_empty)
+    val failTemplate = stringResource(R.string.browser_fail)
+
     fun load(p: String) {
         loading = true
         error = null
@@ -83,12 +109,12 @@ fun RootBrowserDialog(
         scope.launch {
             try {
                 val list = RootHelper.ls(p)
-                if (list.isEmpty()) error = "Kosong / tidak bisa baca: $p (perlu root?)"
+                if (list.isEmpty()) error = emptyTemplate.format(p)
                 entries = list
                 path = p
                 input = p
             } catch (e: Exception) {
-                error = "Gagal: ${e.message}"
+                error = failTemplate.format(e.message)
             } finally {
                 loading = false
             }
@@ -100,173 +126,174 @@ fun RootBrowserDialog(
     }
     LaunchedEffect(initialPath) { load(initialPath) }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
-    ) {
-        Surface(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Header rapi: back = naik 1 level, X = tutup
-                TopAppBar(
-                    navigationIcon = {
-                        TextButton(
-                            onClick = { if (path != "/") load(parentOf(path)) },
-                            enabled = path != "/"
-                        ) { Text("←") }
-                    },
-                    title = {
-                        Text(
-                            text = path,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    actions = {
-                        TextButton(onClick = onDismiss) { Text("✕") }
-                    }
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Header rapi: back = naik 1 level, X = tutup (jika ada)
+        TopAppBar(
+            navigationIcon = {
+                TextButton(
+                    onClick = { if (path != AppConfig.FS_ROOT) load(parentOf(path)) },
+                    enabled = path != AppConfig.FS_ROOT
+                ) { Text(stringResource(R.string.back_arrow)) }
+            },
+            title = {
+                Text(
+                    text = path,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
+            },
+            actions = {
+                onClose?.let { dismiss ->
+                    TextButton(onClick = dismiss) { Text(stringResource(R.string.close_icon)) }
+                }
+            }
+        )
 
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = when (rooted) {
+                    null -> stringResource(R.string.browser_root_checking)
+                    true -> stringResource(R.string.browser_root_ok)
+                    false -> stringResource(R.string.browser_root_none)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (rooted == false) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurface
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = input,
+                    onValueChange = { input = it },
+                    label = { Text(stringResource(R.string.path_label)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f)
+                )
+                Button(onClick = { load(input) }) { Text(stringResource(R.string.go)) }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppConfig.BROWSER_PRESETS.forEach { preset ->
+                    OutlinedButton(onClick = { load(preset) }) {
+                        Text(if (preset == AppConfig.FS_ROOT) preset else preset.substringAfterLast('/'))
+                    }
+                }
+            }
+
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+
+            OutlinedTextField(
+                value = browserQuery,
+                onValueChange = { browserQuery = it },
+                label = { Text(stringResource(R.string.browser_search_hint)) },
+                leadingIcon = { Text("🔍") },
+                trailingIcon = {
+                    if (browserQuery.isNotEmpty()) {
+                        TextButton(onClick = { browserQuery = "" }) {
+                            Text(stringResource(R.string.close_icon))
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (loading) {
+                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (searchingNow) {
+                if (searching) {
+                    Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                } else {
                     Text(
-                        text = when (rooted) {
-                            null -> "Root: mengecek…"
-                            true -> "Root: OK (uid=0)"
-                            false -> "Root: TIDAK ADA — HP belum root / su ditolak"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (rooted == false) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.onSurface
+                        stringResource(R.string.browser_search_results, searchResults.size),
+                        style = MaterialTheme.typography.bodySmall
                     )
-
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        OutlinedTextField(
-                            value = input,
-                            onValueChange = { input = it },
-                            label = { Text("Path") },
-                            singleLine = true,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Button(onClick = { load(input) }) { Text("Go") }
-                    }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(onClick = { load("/") }) { Text("/") }
-                        OutlinedButton(onClick = { load("/data/data") }) { Text("data") }
-                        OutlinedButton(onClick = { load("/data/app") }) { Text("app") }
-                        OutlinedButton(onClick = { load("/sdcard") }) { Text("sdcard") }
-                    }
-
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-
-                    OutlinedTextField(
-                        value = browserQuery,
-                        onValueChange = { browserQuery = it },
-                        label = { Text("Cari folder + isi subfolder…") },
-                        leadingIcon = { Text("🔍") },
-                        trailingIcon = {
-                            if (browserQuery.isNotEmpty()) {
-                                TextButton(onClick = { browserQuery = "" }) { Text("✕") }
-                            }
-                        },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    if (loading) {
-                        Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
-                        }
-                    } else if (searchingNow) {
-                        if (searching) {
-                            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
-                            }
-                        } else {
-                            Text(
-                                "Hasil di folder + subfolder (${searchResults.size}):",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                                items(searchResults, key = { it.path }) { e ->
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable(enabled = e.isDirectory) { load(e.path) }
-                                            .padding(vertical = 10.dp, horizontal = 4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                    ) {
-                                        Text(if (e.isDirectory) "📁" else "📄")
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = e.name,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            val rel = e.path.removePrefix(path).trimStart('/')
-                                            if (rel != e.name && rel.isNotEmpty()) {
-                                                Text(
-                                                    text = rel,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        Text(
-                            "${shown.size}/${entries.size}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
-                            items(shown, key = { it.path }) { e ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable(enabled = e.isDirectory) { load(e.path) }
-                                        .padding(vertical = 10.dp, horizontal = 4.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                ) {
-                                    Text(if (e.isDirectory) "📁" else "📄")
+                    LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                        items(searchResults, key = { it.path }) { e ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable(enabled = e.isDirectory) { load(e.path) }
+                                    .padding(vertical = 10.dp, horizontal = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Text(if (e.isDirectory) "📁" else "📄")
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = e.name,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                    val rel = e.path.removePrefix(path).trimStart('/')
+                                    if (rel != e.name && rel.isNotEmpty()) {
+                                        Text(
+                                            text = rel,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
-
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = { if (path != "/") load(parentOf(path)) else onDismiss() },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("← Kembali") }
-                        Button(
-                            onClick = { onPick(path) },
-                            modifier = Modifier.weight(1f)
-                        ) { Text("Pakai folder ini") }
+                }
+            } else {
+                Text(
+                    "${shown.size}/${entries.size}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f)) {
+                    items(shown, key = { it.path }) { e ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = e.isDirectory) { load(e.path) }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Text(if (e.isDirectory) "📁" else "📄")
+                            Text(
+                                text = e.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(
+                    onClick = {
+                        if (path != AppConfig.FS_ROOT) load(parentOf(path))
+                        else onClose?.invoke()
+                    },
+                    modifier = Modifier.weight(1f)
+                ) { Text(stringResource(R.string.back_label)) }
+                Button(
+                    onClick = { onPick(path) },
+                    modifier = Modifier.weight(1f)
+                ) { Text(stringResource(R.string.use_folder)) }
             }
         }
     }
 }
 
 fun parentOf(p: String): String {
-    if (p == "/") return "/"
+    if (p == AppConfig.FS_ROOT) return AppConfig.FS_ROOT
     val t = p.trimEnd('/')
     val i = t.lastIndexOf('/')
-    return if (i <= 0) "/" else t.substring(0, i)
+    return if (i <= 0) AppConfig.FS_ROOT else t.substring(0, i)
 }

@@ -1,6 +1,109 @@
 <resources>
     <string name="app_name">Root App</string>
-    <string name="pick_folder">Pilih Folder Root</string>
-    <string name="empty_media">Belum ada media. Pilih folder root dulu.</string>
-    <string name="loading">Memuat media…</string>
+
+    <!-- Tabs -->
+    <string name="tab_media">Media</string>
+    <string name="tab_browser">Browser</string>
+    <string name="tab_watch">Jaga</string>
+    <string name="title_media">Root App — Media</string>
+
+    <!-- Sumber -->
+    <string name="action_folder">📂 Folder</string>
+    <string name="action_superuser">🔑 Superuser</string>
+    <string name="root_status">Akses root: %1$s  •  %2$s</string>
+    <string name="root_checking">mengecek…</string>
+    <string name="root_ok">OK (uid=0)</string>
+    <string name="root_none">tidak ada — HP belum root</string>
+    <string name="source_none">Belum ada folder dipilih</string>
+    <string name="source_su">SU Root: %1$s</string>
+    <string name="source_saf">Root: %1$s</string>
+    <string name="recent_title">Terakhir:</string>
+
+    <!-- Cari & filter -->
+    <string name="search_media_hint">Cari nama file…</string>
+    <string name="filter_all">Semua</string>
+    <string name="filter_image">Gambar</string>
+    <string name="filter_video">Video</string>
+    <string name="filter_audio">Audio</string>
+
+    <!-- Grid -->
+    <string name="loading_media">Memuat media…</string>
+    <string name="count_format">%1$d/%2$d • 🖼 %3$d • 🎬 %4$d • 🎵 %5$d</string>
+    <string name="empty_media_start">Belum ada media. Pilih folder root / browser superuser.</string>
+    <string name="no_match">Tidak cocok dengan filter/pencarian.</string>
+    <string name="load_more">Muat %1$d lagi (sisa %2$d)</string>
+
+    <!-- Umum -->
+    <string name="close">Tutup</string>
+    <string name="back_arrow">←</string>
+    <string name="back_label">← Kembali</string>
+    <string name="close_icon">✕</string>
+    <string name="use_folder">Pakai folder ini</string>
+    <string name="go">Go</string>
+    <string name="path_label">Path</string>
+
+    <!-- Browser superuser -->
+    <string name="browser_root_checking">Root: mengecek…</string>
+    <string name="browser_root_ok">Root: OK (uid=0)</string>
+    <string name="browser_root_none">Root: TIDAK ADA — HP belum root / su ditolak</string>
+    <string name="browser_empty">Kosong / tidak bisa baca: %1$s (perlu root?)</string>
+    <string name="browser_fail">Gagal: %1$s</string>
+    <string name="browser_search_hint">Cari folder + isi subfolder…</string>
+    <string name="browser_search_results">Hasil di folder + subfolder (%1$d):</string>
+
+    <!-- Penjaga -->
+    <string name="watch_title">🛡 Penjaga anti-hapus</string>
+    <string name="watch_desc">File baru di folder sumber langsung disalin ke folder simpan + dikunci (chattr +i) sebelum sempat dihapus.</string>
+    <string name="watch_src_label">Folder sumber (diawasi)</string>
+    <string name="watch_dst_label">Folder simpan</string>
+    <string name="watch_pick_src">📁 Pilih sumber</string>
+    <string name="watch_pick_dst">💾 Pilih simpan</string>
+    <string name="watch_every">Cek tiap:</string>
+    <string name="watch_chattr">Kunci file asli (+i) setelah disalin</string>
+    <string name="watch_start">▶ Jalankan penjaga</string>
+    <string name="watch_stop">⏹ Hentikan penjaga</string>
+    <string name="watch_status">Status: %1$s • %2$d file diamankan</string>
+    <string name="watch_on">JALAN</string>
+    <string name="watch_off">berhenti</string>
+    <string name="watch_need_dirs">Isi folder sumber &amp; simpan dulu.</string>
+    <string name="watch_need_root">Butuh akses root (su).</string>
+    <string name="watch_started">Penjaga jalan — pantau %1$s</string>
+    <string name="watch_stopped">Penjaga dihentikan.</string>
+    <string name="watch_log">Log:</string>
+    <string name="watch_notif_title">Root App — penjaga aktif</string>
+    <string name="watch_notif_monitoring">Memantau folder…</string>
+    <string name="watch_notif_watching">Memantau %1$s</string>
+    <string name="watch_notif_saved">%1$d file diamankan • total %2$d</string>
+    <string name="watch_log_saved">✓ %1$d file diamankan (%2$d total)</string>
+    <string name="watch_log_copy_fail">⚠ %1$d file baru tapi copy gagal</string>
+    <string name="watch_log_error">error: %1$s</string>
+    <string name="watch_channel">Penjaga folder</string>
+
+    <!-- Script permanen -->
+    <string name="script_title">Mode permanen (script root):</string>    <string name="script_state">Script: %1$s • %2$s</string>
+    <string name="script_checking">mengecek…</string>
+    <string name="script_installed">terpasang</string>
+    <string name="script_missing">belum dipasang</string>
+    <string name="script_running">JALAN walau app ditutup</string>
+    <string name="script_idle">berhenti</string>
+    <string name="script_install">⚙ Pasang + jalan</string>
+    <string name="script_stop">⏹ Stop</string>
+    <string name="script_delete">🗑 Hapus script permanen</string>
+    <string name="script_ok">Script dipasang + jalan.</string>
+    <string name="script_fail">Gagal — butuh root + Magisk.</string>
+    <string name="script_halted">Script dihentikan.</string>
+    <string name="script_removed">Script dihapus.</string>
+    <string name="script_remove_fail">Gagal hapus.</string>
+
+    <!-- Load -->
+    <string name="load_no_media">Tidak ada media di folder ini.</string>
+    <string name="load_fail_saf">Gagal baca folder: %1$s</string>
+    <string name="load_fail_su">Gagal baca via su: %1$s</string>
+    <string name="load_empty_su">Tidak ada media di %1$s (atau akses ditolak.)</string>
+
+    <!-- Preview -->
+    <string name="preview_unsupported">Preview tidak didukung.</string>    <string name="preview_via_su">%1$s • via su</string>
+    <string name="preview_meta">%1$s • %2$s</string>
+    <string name="preview_su_fail">Gagal baca via su — pastikan HP rooted &amp; akses root diizinkan.</string>
+    <string name="preview_fail">Gagal: %1$s</string>
 </resources>

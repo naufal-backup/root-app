@@ -53,7 +53,7 @@ object RootHelper {
             .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() }))
     }
 
-    suspend fun findMedia(root: String, maxItems: Int = 1200): List<String> =
+    suspend fun findMedia(root: String, maxItems: Int = AppConfig.MAX_SCAN_ITEMS): List<String> =
         withContext(Dispatchers.IO) {
             val cmd = "find \"$root\" -type f \\( " +
                 "-iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o " +
@@ -63,14 +63,19 @@ object RootHelper {
                 "-iname '*.mov' -o -iname '*.mp3' -o -iname '*.wav' -o " +
                 "-iname '*.ogg' -o -iname '*.m4a' -o -iname '*.flac' -o " +
                 "-iname '*.aac' \\) 2>/dev/null | head -n $maxItems"
-            val out = withTimeoutOrNull(60_000) { execSu(cmd) } ?: return@withContext emptyList()
+            val out = withTimeoutOrNull(AppConfig.SU_COPY_TIMEOUT_MS) { execSu(cmd) } ?: return@withContext emptyList()
             out.lines().map { it.trim() }.filter { it.isNotEmpty() }.take(maxItems)
         }
 
     /** Cari rekursif nama file/folder di bawah root (depth dibatasi agar cepat). */
-    suspend fun search(root: String, query: String, maxDepth: Int = 4, maxItems: Int = 50): List<RootEntry> =
+    suspend fun search(
+        root: String,
+        query: String,
+        maxDepth: Int = AppConfig.SEARCH_MAX_DEPTH,
+        maxItems: Int = AppConfig.MAX_SEARCH_RESULTS
+    ): List<RootEntry> =
         withContext(Dispatchers.IO) {
-            val q = query.replace(Regex("[\"\\\\`$]"), "").take(40)
+            val q = query.replace(Regex("[\"\\\\`$]"), "").take(AppConfig.SEARCH_QUERY_MAX)
             if (q.isBlank()) return@withContext emptyList()
             val pattern = "*$q*"
             val dirs = execSu(
@@ -101,7 +106,7 @@ object RootHelper {
             try {
                 val name = srcPath.substringAfterLast('/').ifEmpty { "f" }.takeLast(50)
                     .replace(Regex("[^A-Za-z0-9._-]"), "_")
-                val dst = File(cacheDir, "su_thumbs/${srcPath.hashCode()}_$name")
+                val dst = File(cacheDir, "${AppConfig.THUMB_DIR}/${srcPath.hashCode()}_$name")
                 if (dst.exists() && dst.length() > 0) return@withContext dst
                 thumbSlots.withPermit {
                     if (dst.exists() && dst.length() > 0) return@withPermit dst
@@ -161,7 +166,7 @@ object RootHelper {
                         p.inputStream.use { ins ->
                             dst.outputStream().use { outs -> ins.copyTo(outs) }
                         }
-                        withTimeoutOrNull(60_000) { p.waitFor() } ?: continue
+                        withTimeoutOrNull(AppConfig.SU_COPY_TIMEOUT_MS) { p.waitFor() } ?: continue
                         if (p.exitValue() == 0 && dst.exists() && dst.length() > 0) {
                             return@withContext true
                         }
@@ -174,12 +179,12 @@ object RootHelper {
         }
 
     /** Namespace system_server dulu, fallback su biasa. */
-    private fun execSu(cmd: String, timeoutMs: Long = 15_000): String? {
+    private fun execSu(cmd: String, timeoutMs: Long = AppConfig.SU_CMD_TIMEOUT_MS): String? {
         return runSu(wrapNs(cmd), timeoutMs) ?: runSu(cmd, timeoutMs)
     }
 
     /** Versi publik untuk kebutuhan internal fitur lain. */
-    suspend fun execSuPublic(cmd: String, timeoutMs: Long = 15_000): String? =
+    suspend fun execSuPublic(cmd: String, timeoutMs: Long = AppConfig.SU_CMD_TIMEOUT_MS): String? =
         withContext(Dispatchers.IO) { execSu(cmd, timeoutMs) }
 
     private fun runSu(shellCmd: String, timeoutMs: Long): String? {

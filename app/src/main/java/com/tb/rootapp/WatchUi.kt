@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
@@ -60,16 +61,16 @@ fun WatchCard() {
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("🛡 Penjaga anti-hapus", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.watch_title), style = MaterialTheme.typography.titleSmall)
             Text(
-                "File baru di folder sumber langsung disalin ke folder simpan + dikunci (chattr +i) sebelum sempat dihapus.",
+                stringResource(R.string.watch_desc),
                 style = MaterialTheme.typography.bodySmall
             )
 
             OutlinedTextField(
                 value = cfg.src,
                 onValueChange = { persist(cfg.copy(src = it)) },
-                label = { Text("Folder sumber (diawasi)") },
+                label = { Text(stringResource(R.string.watch_src_label)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -77,16 +78,16 @@ fun WatchCard() {
                 OutlinedButton(
                     onClick = { pickingSrc = true },
                     modifier = Modifier.weight(1f)
-                ) { Text("📁 Pilih sumber") }
+                ) { Text(stringResource(R.string.watch_pick_src)) }
                 OutlinedButton(
                     onClick = { pickingDst = true },
                     modifier = Modifier.weight(1f)
-                ) { Text("💾 Pilih simpan") }
+                ) { Text(stringResource(R.string.watch_pick_dst)) }
             }
             OutlinedTextField(
                 value = cfg.dst,
                 onValueChange = { persist(cfg.copy(dst = it)) },
-                label = { Text("Folder simpan") },
+                label = { Text(stringResource(R.string.watch_dst_label)) },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -95,8 +96,8 @@ fun WatchCard() {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Cek tiap:", style = MaterialTheme.typography.bodySmall)
-                listOf(2, 3, 5, 10).forEach { s ->
+                Text(stringResource(R.string.watch_every), style = MaterialTheme.typography.bodySmall)
+                AppConfig.WATCH_INTERVALS.forEach { s ->
                     FilterChip(
                         selected = cfg.intervalSec == s,
                         onClick = { persist(cfg.copy(intervalSec = s)) },
@@ -110,7 +111,7 @@ fun WatchCard() {
                     checked = cfg.chattr,
                     onCheckedChange = { persist(cfg.copy(chattr = it)) }
                 )
-                Text("Kunci file asli (+i) setelah disalin", style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.watch_chattr), style = MaterialTheme.typography.bodySmall)
             }
 
             Button(
@@ -122,18 +123,18 @@ fun WatchCard() {
                             if (cfg.enabled) {
                                 persist(cfg.copy(enabled = false))
                                 WatchService.stop(context)
-                                msg = "Penjaga dihentikan."
+                                msg = context.getString(R.string.watch_stopped)
                             } else {
                                 if (cfg.src.isBlank() || cfg.dst.isBlank()) {
-                                    msg = "Isi folder sumber & simpan dulu."
+                                    msg = context.getString(R.string.watch_need_dirs)
                                 } else if (!RootHelper.isRootAvailable()) {
-                                    msg = "Butuh akses root (su)."
+                                    msg = context.getString(R.string.watch_need_root)
                                 } else {
                                     WatchStore.resetKnown(context)
                                     persist(cfg.copy(enabled = true))
                                     WatchService.start(context)
                                     saved = WatchStore.savedCount(context)
-                                    msg = "Penjaga jalan — pantau ${cfg.src}"
+                                    msg = context.getString(R.string.watch_started, cfg.src)
                                 }
                             }
                         } finally {
@@ -144,11 +145,15 @@ fun WatchCard() {
                 enabled = !busy,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (cfg.enabled) "⏹ Hentikan penjaga" else "▶ Jalankan penjaga")
+                Text(if (cfg.enabled) stringResource(R.string.watch_stop) else stringResource(R.string.watch_start))
             }
 
             Text(
-                "Status: ${if (cfg.enabled) "JALAN" else "berhenti"} • $saved file diamankan",
+                stringResource(
+                    R.string.watch_status,
+                    if (cfg.enabled) stringResource(R.string.watch_on) else stringResource(R.string.watch_off),
+                    saved
+                ),
                 style = MaterialTheme.typography.bodySmall
             )
             msg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
@@ -156,7 +161,7 @@ fun WatchCard() {
             ScriptSection(cfg)
 
             if (logs.isNotEmpty()) {
-                Text("Log:", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.watch_log), style = MaterialTheme.typography.labelMedium)
                 logs.takeLast(5).forEach { line ->
                     Text(
                         line,
@@ -171,7 +176,7 @@ fun WatchCard() {
 
     if (pickingSrc) {
         RootBrowserDialog(
-            initialPath = cfg.src.ifBlank { "/data/data" },
+            initialPath = cfg.src.ifBlank { AppConfig.DEFAULT_SU_PATH },
             onPick = { p ->
                 persist(cfg.copy(src = p))
                 pickingSrc = false
@@ -181,7 +186,7 @@ fun WatchCard() {
     }
     if (pickingDst) {
         RootBrowserDialog(
-            initialPath = cfg.dst.ifBlank { "/sdcard" },
+            initialPath = cfg.dst.ifBlank { AppConfig.DEFAULT_WATCH_DST },
             onPick = { p ->
                 persist(cfg.copy(dst = p))
                 pickingDst = false
@@ -213,17 +218,21 @@ fun ScriptSection(cfg: WatchStore.Config) {
     LaunchedEffect(Unit) { refresh() }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("Mode permanen (script root):", style = MaterialTheme.typography.labelMedium)
+        Text(stringResource(R.string.script_title), style = MaterialTheme.typography.labelMedium)
         Text(
-            "Script: " + when (installed) {
-                null -> "mengecek…"
-                true -> "terpasang"
-                false -> "belum dipasang"
-            } + " • " + when (running) {
-                null -> ""
-                true -> "JALAN walau app ditutup"
-                false -> "berhenti"
+            stringResource(
+            R.string.script_state,
+            when (installed) {
+                null -> stringResource(R.string.script_checking)
+                true -> stringResource(R.string.script_installed)
+                false -> stringResource(R.string.script_missing)
             },
+            when (running) {
+                null -> ""
+                true -> stringResource(R.string.script_running)
+                false -> stringResource(R.string.script_idle)
+            }
+        ),
             style = MaterialTheme.typography.bodySmall
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -235,41 +244,41 @@ fun ScriptSection(cfg: WatchStore.Config) {
                         val ok = WatchScript.installAndStart(
                             cfg.src, cfg.dst, cfg.intervalSec, cfg.chattr
                         )
-                        msg = if (ok) "Script dipasang + jalan." else "Gagal — butuh root + Magisk."
+                        msg = context.getString(if (ok) R.string.script_ok else R.string.script_fail)
                         refresh()
                         busy = false
                     }
                 },
                 enabled = !busy,
                 modifier = Modifier.weight(1f)
-            ) { Text("⚙ Pasang + jalan") }
+            ) { Text(stringResource(R.string.script_install)) }
             OutlinedButton(
                 onClick = {
                     busy = true
                     scope.launch {
                         WatchScript.stop()
                         refresh()
-                        msg = "Script dihentikan."
+                        msg = context.getString(R.string.script_halted)
                         busy = false
                     }
                 },
                 enabled = !busy,
                 modifier = Modifier.weight(1f)
-            ) { Text("⏹ Stop") }
+            ) { Text(stringResource(R.string.script_stop)) }
         }
         OutlinedButton(
             onClick = {
                 busy = true
                 scope.launch {
                     val ok = WatchScript.uninstall()
-                    msg = if (ok) "Script dihapus." else "Gagal hapus."
+                    msg = context.getString(if (ok) R.string.script_removed else R.string.script_remove_fail)
                     refresh()
                     busy = false
                 }
             },
             enabled = !busy,
             modifier = Modifier.fillMaxWidth()
-        ) { Text("🗑 Hapus script permanen") }
+        ) { Text(stringResource(R.string.script_delete)) }
         msg?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }

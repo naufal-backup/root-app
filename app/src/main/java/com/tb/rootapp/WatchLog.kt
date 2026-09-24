@@ -17,18 +17,18 @@ object WatchLog {
     fun load(context: Context) {
         val set = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getStringSet(KEY, emptySet())?.toList()?.sorted() ?: emptyList()
-        _lines.value = set.takeLast(30).map { it.substringAfter('|', it) }
+        _lines.value = set.takeLast(AppConfig.MAX_LOG_LINES).map { it.substringAfter('|', it) }
     }
 
     fun push(context: Context, msg: String) {
         val stamp = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date())
         val line = "[$stamp] $msg"
-        _lines.value = (_lines.value + line).takeLast(30)
+        _lines.value = (_lines.value + line).takeLast(AppConfig.MAX_LOG_LINES)
         try {
             val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val cur = p.getStringSet(KEY, emptySet())?.toMutableSet() ?: mutableSetOf()
             cur.add(System.currentTimeMillis().toString() + "|" + line)
-            val trimmed = if (cur.size > 60) cur.toList().sorted().takeLast(60).toSet() else cur
+            val trimmed = if (cur.size > AppConfig.MAX_LOG_LINES * 2) cur.toList().sorted().takeLast(AppConfig.MAX_LOG_LINES * 2).toSet() else cur
             p.edit().putStringSet(KEY, trimmed).apply()
         } catch (_: Exception) { }
     }

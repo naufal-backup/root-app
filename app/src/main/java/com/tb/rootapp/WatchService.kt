@@ -50,8 +50,8 @@ class WatchService : android.app.Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val notif: Notification = NotificationCompat.Builder(this, CH)
-            .setContentTitle("Root App — penjaga aktif")
-            .setContentText("Memantau folder…")
+            .setContentTitle(getString(R.string.watch_notif_title))
+            .setContentText(getString(R.string.watch_notif_monitoring))
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentIntent(pi)
             .setOngoing(true)
@@ -74,7 +74,7 @@ class WatchService : android.app.Service() {
                 WatchStore.remember(this, first)
             }
         } catch (_: Exception) { }
-        updateNotif("Memantau ${cfg.src}")
+        updateNotif(getString(R.string.watch_notif_watching, cfg.src))
 
         while (scope.isActive) {
             try {
@@ -98,16 +98,16 @@ class WatchService : android.app.Service() {
                     WatchStore.remember(this, fresh.map { it.name })
                     if (saved > 0) {
                         WatchStore.addSaved(this, saved)
-                        WatchLog.push(this, "✓ $saved file diamankan (${WatchStore.savedCount(this)} total)")
+                        WatchLog.push(this, getString(R.string.watch_log_saved, saved, WatchStore.savedCount(this)))
                     } else {
-                        WatchLog.push(this, "⚠ ${fresh.size} file baru tapi copy gagal")
+                        WatchLog.push(this, getString(R.string.watch_log_copy_fail, fresh.size))
                     }
-                    updateNotif("$saved file diamankan • total ${WatchStore.savedCount(this)}")
+                    updateNotif(getString(R.string.watch_notif_saved, saved, WatchStore.savedCount(this)))
                 }
-                delay((cur.intervalSec.coerceIn(2, 60) * 1000L))
+                delay((cur.intervalSec.coerceIn(AppConfig.MIN_WATCH_INTERVAL, AppConfig.MAX_WATCH_INTERVAL) * 1000L))
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
-                WatchLog.push(this, "error: ${e.message?.take(100)}")
+                WatchLog.push(this, getString(R.string.watch_log_error, e.message?.take(100) ?: ""))
                 delay(5000)
             }
         }
@@ -137,7 +137,7 @@ class WatchService : android.app.Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val n = NotificationCompat.Builder(this, CH)
-            .setContentTitle("Root App — penjaga aktif")
+            .setContentTitle(getString(R.string.watch_notif_title))
             .setContentText(text.take(120))
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
             .setContentIntent(pi)
@@ -150,7 +150,7 @@ class WatchService : android.app.Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val nm = getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(
-                NotificationChannel(CH, "Penjaga folder", NotificationManager.IMPORTANCE_LOW)
+                NotificationChannel(CH, getString(R.string.watch_channel), NotificationManager.IMPORTANCE_LOW)
             )
         }
     }
@@ -162,8 +162,8 @@ class WatchService : android.app.Service() {
     }
 
     companion object {
-        const val CH = "watch_channel"
-        const val ID = 2001
+        const val CH = AppConfig.WATCH_CHANNEL_ID
+        const val ID = AppConfig.WATCH_NOTIF_ID
 
         fun start(context: Context) {
             val i = Intent(context, WatchService::class.java)

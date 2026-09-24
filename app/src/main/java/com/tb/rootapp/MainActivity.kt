@@ -25,7 +25,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items as lazyItems
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SearchBar
 import androidx.compose.material3.SuggestionChip
 import androidx.compose.material3.Button
@@ -45,6 +49,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -99,32 +105,38 @@ fun RootMediaScreen() {
     var query by remember { mutableStateOf("") }
     var searchActive by remember { mutableStateOf(false) }
     var debouncedQuery by remember { mutableStateOf("") }
-    var visibleCount by remember { mutableStateOf(200) }
+    var visibleCount by remember { mutableStateOf(AppConfig.PAGE_SIZE) }
     var selected by remember { mutableStateOf<MediaItem?>(null) }
-    var showSuBrowser by remember { mutableStateOf(false) }
     var rooted by remember { mutableStateOf<Boolean?>(null) }
     var recentSaf by remember { mutableStateOf(getRecentSaf(context)) }
     var recentSu by remember { mutableStateOf(getRecentSu(context)) }
+    var tab by remember { mutableIntStateOf(0) }
+
+    // Template teks (stringResource tak bisa dipanggil dari dalam launch)
+    val tNoMedia = stringResource(R.string.load_no_media)
+    val tFailSaf = stringResource(R.string.load_fail_saf)
+    val tFailSu = stringResource(R.string.load_fail_su)
+    val tEmptySu = stringResource(R.string.load_empty_su)
 
     // debounce ketikan agar grid tidak recompute tiap huruf
     LaunchedEffect(query) {
-        delay(300)
+        delay(AppConfig.SEARCH_DEBOUNCE_MS)
         debouncedQuery = query
-        visibleCount = 200
+        visibleCount = AppConfig.PAGE_SIZE
     }
-    LaunchedEffect(filter) { visibleCount = 200 }
+    LaunchedEffect(filter) { visibleCount = AppConfig.PAGE_SIZE }
 
     fun load(uri: Uri) {
         if (loading) return
         loading = true
         error = null
-        visibleCount = 200
+        visibleCount = AppConfig.PAGE_SIZE
         scope.launch {
             try {
                 media = MediaRepository.fetchFromRoot(context, uri)
-                if (media.isEmpty()) error = "Tidak ada media di folder ini."
+                if (media.isEmpty()) error = tNoMedia
             } catch (e: Exception) {
-                error = "Gagal baca folder: ${e.message}"
+                error = tFailSaf.format(e.message)
             } finally {
                 loading = false
             }
@@ -135,7 +147,7 @@ fun RootMediaScreen() {
         if (loading) return
         loading = true
         error = null
-        visibleCount = 200
+        visibleCount = AppConfig.PAGE_SIZE
         scope.launch {
             try {
                 val paths = RootHelper.findMedia(path)
@@ -149,9 +161,9 @@ fun RootMediaScreen() {
                         filePath = p
                     )
                 }
-                if (media.isEmpty()) error = "Tidak ada media di $path (atau akses ditolak)."
+                if (media.isEmpty()) error = tEmptySu.format(path)
             } catch (e: Exception) {
-                error = "Gagal baca via su: ${e.message}"
+                error = tFailSu.format(e.message)
             } finally {
                 loading = false
             }
@@ -200,17 +212,26 @@ fun RootMediaScreen() {
     // pagination: render bertahap agar grid tidak macet di ribuan item
     val visible = remember(filtered, visibleCount) { filtered.take(visibleCount) }
 
-    val countText = remember(media, filtered) {
+    val countFmt = stringResource(R.string.count_format)
+    val countText = remember(media, filtered, countFmt) {
         val img = media.count { it.isImage }
         val vid = media.count { it.isVideo }
         val aud = media.count { it.isAudio }
-        "${filtered.size}/${media.size} • 🖼 $img • 🎬 $vid • 🎵 $aud"
+        countFmt.format(filtered.size, media.size, img, vid, aud)
     }
 
     val sourceText = when {
-        suRoot != null -> "SU Root: $suRoot"
-        rootUri != null -> "Root: ${rootUri?.path?.takeLast(60)}"
-        else -> "Belum ada folder dipilih"
+        suRoot != null -> stringResource(R.string.source_su, suRoot ?: "")
+        rootUri != null -> stringResource(
+            R.string.source_saf,
+            rootUri?.path?.takeLast(AppConfig.RECENT_LABEL_CHARS) ?: ""
+        )
+        else -> stringResource(R.string.source_none)
+    }
+    val rootLabel = when (rooted) {
+        null -> stringResource(R.string.root_checking)
+        true -> stringResource(R.string.root_ok)
+        false -> stringResource(R.string.root_none)
     }
 
     // Loader Coil + decoder frame video (untuk thumbnail superuser)
@@ -220,11 +241,76 @@ fun RootMediaScreen() {
             .build()
     }
 
+    fun pickSuFolder(path: String) {
+        saveSuRoot(context, path)
+        saveRootUriClear(context)
+        addRecentSu(context, path)
+        recentSu = getRecentSu(context)
+        suRoot = path
+        rootUri = null
+        loadSu(path)
+        tab = 0
+    }
+
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Root App — Media") }) }
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        when (tab) {
+                            1 -> stringResource(R.string.tab_browser)
+                            2 -> stringResource(R.string.tab_watch)
+                            else -> stringResource(R.string.title_media)
+                        }
+                    )
+                },
+                actions = {
+                    Text(
+                        if (rooted == true) "🟢" else if (rooted == false) "🔴" else "⚪",
+                        modifier = Modifier.padding(end = 16.dp)
+                    )
+                }
+            )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    selected = tab == 0,
+                    onClick = { tab = 0 },
+                    icon = { Text("🖼") },
+                    label = { Text(stringResource(R.string.tab_media)) }
+                )
+                NavigationBarItem(
+                    selected = tab == 1,
+                    onClick = { tab = 1 },
+                    icon = { Text("📁") },
+                    label = { Text(stringResource(R.string.tab_browser)) }
+                )
+                NavigationBarItem(
+                    selected = tab == 2,
+                    onClick = { tab = 2 },
+                    icon = { Text("🛡") },
+                    label = { Text(stringResource(R.string.tab_watch)) }
+                )
+            }
+        }
     ) { padding ->
-        // Satu container scroll: header span penuh, media jadi sel grid
-        LazyVerticalGrid(
+        when (tab) {
+            1 -> Column(Modifier.fillMaxSize().padding(padding)) {
+                RootBrowserContent(
+                    initialPath = suRoot ?: AppConfig.DEFAULT_SU_PATH,
+                    onPick = { pickSuFolder(it) },
+                    onClose = null
+                )
+            }
+            2 -> Column(
+                Modifier.fillMaxSize().padding(padding)
+                    .verticalScroll(rememberScrollState()).padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                WatchCard()
+            }
+            else -> LazyVerticalGrid(
             columns = GridCells.Fixed(3),
             modifier = Modifier
                 .fillMaxSize()
@@ -239,21 +325,17 @@ fun RootMediaScreen() {
                     Button(
                         onClick = { picker.launch(null) },
                         modifier = Modifier.weight(1f)
-                    ) { Text("📂 Folder") }
+                    ) { Text(stringResource(R.string.action_folder)) }
                     OutlinedButton(
-                        onClick = { showSuBrowser = true },
+                        onClick = { tab = 1 },
                         modifier = Modifier.weight(1f)
-                    ) { Text("🔑 Superuser") }
+                    ) { Text(stringResource(R.string.action_superuser)) }
                 }
             }
 
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Text(
-                    text = "Akses root: " + when (rooted) {
-                        null -> "mengecek…"
-                        true -> "OK (uid=0)"
-                        false -> "tidak ada — HP belum root"
-                    } + "  •  $sourceText",
+                    text = stringResource(R.string.root_status, rootLabel, sourceText),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 3,
                     overflow = TextOverflow.Ellipsis
@@ -264,7 +346,10 @@ fun RootMediaScreen() {
             if (recentSaf.isNotEmpty() || recentSu.isNotEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text("Terakhir:", style = MaterialTheme.typography.labelMedium)
+                        Text(
+                        stringResource(R.string.recent_title),
+                        style = MaterialTheme.typography.labelMedium
+                    )
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     lazyItems(recentSu, key = { "su:$it" }) { p ->
                         SuggestionChip(
@@ -275,7 +360,7 @@ fun RootMediaScreen() {
                                 rootUri = null
                                 loadSu(p)
                             },
-                            label = { Text("🔑 ${p.takeLast(28)}") }
+                            label = { Text("🔑 ${p.takeLast(AppConfig.RECENT_LABEL_CHARS)}") }
                         )
                     }
                     lazyItems(recentSaf, key = { "saf:$it" }) { u ->
@@ -290,15 +375,13 @@ fun RootMediaScreen() {
                                     load(uri)
                                 } catch (_: Exception) { }
                             },
-                            label = { Text("📂 ${u.takeLast(28)}") }
+                            label = { Text("📂 ${u.takeLast(AppConfig.RECENT_LABEL_CHARS)}") }
                         )
                     }
                         }
                     }
                 }
             }
-
-            item(span = { GridItemSpan(maxLineSpan) }) { WatchCard() }
 
             item(span = { GridItemSpan(maxLineSpan) }) {
                 SearchBar(
@@ -307,10 +390,10 @@ fun RootMediaScreen() {
                 onSearch = { searchActive = false },
                 active = searchActive,
                 onActiveChange = { searchActive = it },
-                placeholder = { Text("Cari nama file…") },
+                placeholder = { Text(stringResource(R.string.search_media_hint)) },
                 leadingIcon = {
                     if (searchActive) {
-                        TextButton(onClick = { searchActive = false }) { Text("←") }
+                        TextButton(onClick = { searchActive = false }) { Text(stringResource(R.string.back_arrow)) }
                     } else {
                         Text("🔍")
                     }
@@ -323,8 +406,8 @@ fun RootMediaScreen() {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 val suggestions = remember(media, query) {
-                    if (query.isBlank()) media.take(5)
-                    else media.filter { it.name.contains(query, ignoreCase = true) }.take(5)
+                    if (query.isBlank()) media.take(AppConfig.SUGGEST_COUNT)
+                    else media.filter { it.name.contains(query, ignoreCase = true) } .take(AppConfig.SUGGEST_COUNT)
                 }
                 // Column biasa (bukan Lazy) agar aman di dalam item grid
                 Column {
@@ -351,22 +434,22 @@ fun RootMediaScreen() {
                     FilterChip(
                         selected = filter == MediaFilter.ALL,
                         onClick = { filter = MediaFilter.ALL },
-                        label = { Text("Semua") }
+                        label = { Text(stringResource(R.string.filter_all)) }
                     )
                     FilterChip(
                         selected = filter == MediaFilter.IMAGE,
                         onClick = { filter = MediaFilter.IMAGE },
-                        label = { Text("Gambar") }
+                        label = { Text(stringResource(R.string.filter_image)) }
                     )
                     FilterChip(
                         selected = filter == MediaFilter.VIDEO,
                         onClick = { filter = MediaFilter.VIDEO },
-                        label = { Text("Video") }
+                        label = { Text(stringResource(R.string.filter_video)) }
                     )
                     FilterChip(
                         selected = filter == MediaFilter.AUDIO,
                         onClick = { filter = MediaFilter.AUDIO },
-                        label = { Text("Audio") }
+                        label = { Text(stringResource(R.string.filter_audio)) }
                     )
                 }
             }
@@ -374,7 +457,7 @@ fun RootMediaScreen() {
             item(span = { GridItemSpan(maxLineSpan) }) {
                 Column {
                     Text(
-                        text = if (loading) "Memuat media…" else countText,
+                        text = if (loading) stringResource(R.string.loading_media) else countText,
                         style = MaterialTheme.typography.bodyMedium
                     )
                     error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -394,8 +477,8 @@ fun RootMediaScreen() {
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            if (media.isEmpty()) "Belum ada media. Pilih folder root / browser superuser."
-                            else "Tidak cocok dengan filter/pencarian."
+                            if (media.isEmpty()) stringResource(R.string.empty_media_start)
+                            else stringResource(R.string.no_match)
                         )
                     }
                 }
@@ -410,31 +493,22 @@ fun RootMediaScreen() {
                     if (visibleCount < filtered.size) {
                         item(span = { GridItemSpan(maxLineSpan) }) {
                             OutlinedButton(
-                                onClick = { visibleCount += 300 },
+                                onClick = { visibleCount += AppConfig.PAGE_STEP },
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                            ) { Text("Muat 300 lagi (sisa ${filtered.size - visibleCount})") }
+                            ) {
+                                Text(
+                                    stringResource(
+                                        R.string.load_more,
+                                        AppConfig.PAGE_STEP,
+                                        filtered.size - visibleCount
+                                    )
+                                )
+                            }
                         }
                     }
                 }
             }
         }
-    }
-
-    if (showSuBrowser) {
-        RootBrowserDialog(
-            initialPath = suRoot ?: "/data/data",
-            onPick = { path ->
-                saveSuRoot(context, path)
-                saveRootUriClear(context)
-                addRecentSu(context, path)
-                recentSu = getRecentSu(context)
-                suRoot = path
-                rootUri = null
-                showSuBrowser = false
-                loadSu(path)
-            },
-            onDismiss = { showSuBrowser = false }
-        )
     }
 
     selected?.let { item ->
@@ -449,7 +523,7 @@ fun MediaCard(item: MediaItem, imageLoader: ImageLoader, onClick: () -> Unit) {
     val thumb = remember(item) {
         ImageRequest.Builder(context)
             .data(item.uri)
-            .size(300)
+            .size(AppConfig.THUMB_SIZE_PX)
             .crossfade(false)
             .build()
     }
@@ -535,7 +609,7 @@ fun SuThumb(item: MediaItem, imageLoader: ImageLoader) {
             val req = remember(file) {
                 ImageRequest.Builder(context)
                     .data(file)
-                    .size(300)
+                    .size(AppConfig.THUMB_SIZE_PX)
                     .crossfade(false)
                     .build()
             }
@@ -589,7 +663,7 @@ fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
             Column(modifier = Modifier.fillMaxSize()) {
                 TopAppBar(
                     navigationIcon = {
-                        TextButton(onClick = onDismiss) { Text("←") }
+                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.back_arrow)) }
                     },
                     title = {
                         Text(
@@ -600,13 +674,13 @@ fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
                         )
                     },
                     actions = {
-                        TextButton(onClick = onDismiss) { Text("Tutup") }
+                        TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
                     }
                 )
                 Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text(
-                    text = if (item.filePath != null) "${item.filePath} • via su"
-                        else "${item.mimeType ?: "-"} • ${formatSize(item.size)}",
+                    text = if (item.filePath != null) stringResource(R.string.preview_via_su, item.filePath ?: "")
+                        else stringResource(R.string.preview_meta, item.mimeType ?: "-", formatSize(item.size)),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -626,7 +700,7 @@ fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
                                 modifier = Modifier.fillMaxSize()
                             )
                             item.isVideo || item.isAudio -> VideoPlayer(uri = item.uri)
-                            else -> Text("Preview tidak didukung.")
+                            else -> Text(stringResource(R.string.preview_unsupported))
                         }
                     }
                 }
@@ -653,9 +727,9 @@ fun SuPreviewContent(item: MediaItem) {
             val dst = File(context.cacheDir, "su_preview/$safeName")
             val ok = withContext(Dispatchers.IO) { RootHelper.copyToCache(src, dst) }
             if (ok) cachedUri = Uri.fromFile(dst)
-            else suError = "Gagal baca via su — pastikan HP rooted & akses root diizinkan."
+            else suError = context.getString(R.string.preview_su_fail)
         } catch (e: Exception) {
-            suError = "Gagal: ${e.message}"
+            suError = context.getString(R.string.preview_fail, e.message)
         }
     }
 
@@ -672,7 +746,7 @@ fun SuPreviewContent(item: MediaItem) {
             modifier = Modifier.fillMaxSize()
         )
         item.isVideo || item.isAudio -> VideoPlayer(uri = cachedUri!!)
-        else -> Text("Preview tidak didukung.")
+        else -> Text(stringResource(R.string.preview_unsupported))
     }
 }
 
