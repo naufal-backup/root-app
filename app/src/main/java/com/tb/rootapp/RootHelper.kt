@@ -24,6 +24,16 @@ object RootHelper {
         }
     }
 
+    /**
+     * Bungkus command agar jalan di mount namespace system_server.
+     * su (Magisk) memakai mnt namespace berbeda → /data/data tak terlihat.
+     * system_server melihat view yang benar.
+     */
+    private fun wrapNs(cmd: String): String {
+        val safe = cmd.replace("'", "'\\''")
+        return "nsenter -t \$(pidof system_server) -m -- sh -c '$safe'"
+    }
+
     suspend fun ls(path: String): List<RootEntry> = withContext(Dispatchers.IO) {
         // pakai ls -a -p, parse trailing '/' sebagai direktori
         val out = execSu("ls -a -p \"$path\"") ?: return@withContext emptyList()
@@ -31,7 +41,7 @@ object RootHelper {
             .map { it.trim() }
             .filter { it.isNotEmpty() && it != "./" && it != "../" }
             .mapNotNull { raw ->
-                // ls -p menambah '/' di akhir direktori, tapi juga untuk symlink aneh — cukup pakai itu
+                // ls -p menambah '/' di akhir direktori
                 val isDir = raw.endsWith("/")
                 val name = raw.trimEnd('/')
                 if (name.isEmpty() || name == "." || name == "..") return@mapNotNull null
@@ -77,26 +87,51 @@ object RootHelper {
             out
         }
 
-    /** Copy file root-only ke cache app via `su -c cat`. Return true jika sukses. */
+    /**
+     * Copy file root-only ke cache app.
+     * `su -c cat` jalan di namespace system_server; redirection di sisi app.
+     */
     suspend fun copyToCache(srcPath: String, dst: File): Boolean =
         withContext(Dispatchers.IO) {
             try {
                 dst.parentFile?.mkdirs()
-                val p = Runtime.getRuntime().exec(arrayOf("su", "-c", "cat \"$srcPath\""))
-                p.inputStream.use { ins ->
-                    dst.outputStream().use { outs -> ins.copyTo(outs) }
+                val esc = srcPath
+                    .replace("\\", "\\\\")
+                    .replace("\"", "\\\"")
+                    .replace("$", "\\$")
+                    .replace("`", "\\`")
+                // Namespace system_server dulu, fallback su biasa
+                val cmds = listOf(
+                    "nsenter -t \$(pidof system_server) -m -- cat \"$esc\"",
+                    "cat \"$esc\""
+                )
+                for (c in cmds) {
+                    try {
+                        dst.delete()
+                        val p = Runtime.getRuntime().exec(arrayOf("su", "-c", c))
+                        p.inputStream.use { ins ->
+                            dst.outputStream().use { outs -> ins.copyTo(outs) }
+                        }
+                        withTimeoutOrNull(60_000) { p.waitFor() } ?: continue
+                        if (p.exitValue() == 0 && dst.exists() && dst.length() > 0) {
+                            return@withContext true
+                        }
+                    } catch (_: Exception) { }
                 }
-                // drain stderr agar tidak block, tunggu exit
-                withTimeoutOrNull(60_000) { p.waitFor() } ?: return@withContext false
-                p.exitValue() == 0 && dst.exists() && dst.length() > 0
+                false
             } catch (_: Exception) {
                 false
             }
         }
 
+    /** Namespace system_server dulu, fallback su biasa. */
     private fun execSu(cmd: String, timeoutMs: Long = 15_000): String? {
+        return runSu(wrapNs(cmd), timeoutMs) ?: runSu(cmd, timeoutMs)
+    }
+
+    private fun runSu(shellCmd: String, timeoutMs: Long): String? {
         return try {
-            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
+            val p = Runtime.getRuntime().exec(arrayOf("su", "-c", shellCmd))
             val out = StringBuilder()
             val err = StringBuilder()
             val tOut = Thread { try { p.inputStream.bufferedReader().forEachLine { out.appendLine(it) } } catch (_: Exception) {} }
