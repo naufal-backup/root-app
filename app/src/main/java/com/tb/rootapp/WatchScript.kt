@@ -14,6 +14,8 @@ object WatchScript {
     fun build(src: String, dst: String, intervalSec: Int, chattr: Boolean): String {
         // Kutip ganda di-escape agar aman disuntik ke shell
         val q = { s: String -> s.replace("\\", "\\\\").replace("\"", "\\\"") }
+        // Semua $ shell ditulis ${'$'} agar tak ditelan template Kotlin
+        val D = "${'$'}"
         return """
         |#!/system/bin/sh
         |# RootApp penjaga anti-hapus (otomatis, jangan edit manual)
@@ -22,18 +24,18 @@ object WatchScript {
         |INTERVAL=${intervalSec.coerceIn(2, 60)}
         |LOCKCHATTR=${if (chattr) 1 else 0}
         |(
-        |mkdir -p "$DST"
+        |mkdir -p "${D}DST"
         |while true; do
-        |  for f in "$SRC"/*; do
-        |    [ -e "$f" ] || continue
-        |    [ -d "$f" ] && continue
-        |    base="${'$'}{f##*/}"
-        |    if [ ! -e "$DST/$base" ]; then
-        |      cp -n "$f" "$DST/$base" 2>/dev/null
-        |      if [ "$LOCKCHATTR" = 1 ]; then chattr +i "$f" 2>/dev/null; fi
+        |  for f in "${D}SRC"/*; do
+        |    [ -e "${D}f" ] || continue
+        |    [ -d "${D}f" ] && continue
+        |    base="${D}{f##*/}"
+        |    if [ ! -e "${D}DST/${D}base" ]; then
+        |      cp -n "${D}f" "${D}DST/${D}base" 2>/dev/null
+        |      if [ "${D}LOCKCHATTR" = 1 ]; then chattr +i "${D}f" 2>/dev/null; fi
         |    fi
         |  done
-        |  sleep "$INTERVAL"
+        |  sleep "${D}INTERVAL"
         |done
         |) &
         """.trimMargin()
