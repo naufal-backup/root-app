@@ -1,0 +1,25 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Mata view-once -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="7"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M20,52 C32,34 76,34 88,52 C76,70 32,70 20,52 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,43m-9,0a9,9 0,1 1,18 0a9,9 0,1 1,-18 0" />
+    <!-- Panah unduh (autosaver) -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M54,76 L54,89 M48,83 L54,89 L60,83" />
+</vector>
