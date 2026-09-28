@@ -114,6 +114,35 @@ fun WatchCard() {
                 Text(stringResource(R.string.watch_chattr), style = MaterialTheme.typography.bodySmall)
             }
 
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(stringResource(R.string.watch_mode_label), style = MaterialTheme.typography.bodySmall)
+                FilterChip(
+                    selected = cfg.autoSave,
+                    onClick = {
+                        persist(cfg.copy(autoSave = true))
+                    },
+                    label = { Text(stringResource(R.string.watch_mode_auto)) }
+                )
+                FilterChip(
+                    selected = !cfg.autoSave,
+                    onClick = {
+                        persist(cfg.copy(autoSave = false, enabled = false))
+                        WatchService.stop(context)
+                        saved = WatchStore.savedCount(context)
+                    },
+                    label = { Text(stringResource(R.string.watch_mode_manual)) }
+                )
+            }
+            if (!cfg.autoSave) {
+                Text(
+                    stringResource(R.string.watch_manual_hint),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
             Button(
                 onClick = {
                     busy = true
@@ -125,7 +154,9 @@ fun WatchCard() {
                                 WatchService.stop(context)
                                 msg = context.getString(R.string.watch_stopped)
                             } else {
-                                if (cfg.src.isBlank() || cfg.dst.isBlank()) {
+                                if (!cfg.autoSave) {
+                                    msg = context.getString(R.string.watch_manual_hint)
+                                } else if (cfg.src.isBlank() || cfg.dst.isBlank()) {
                                     msg = context.getString(R.string.watch_need_dirs)
                                 } else if (!RootHelper.isRootAvailable()) {
                                     msg = context.getString(R.string.watch_need_root)
@@ -242,10 +273,14 @@ fun ScriptSection(cfg: WatchStore.Config) {
                     busy = true
                     msg = null
                     scope.launch {
-                        val ok = WatchScript.installAndStart(
-                            cfg.src, cfg.dst, cfg.intervalSec, cfg.chattr
-                        )
-                        msg = context.getString(if (ok) R.string.script_ok else R.string.script_fail)
+                        if (!cfg.autoSave) {
+                            msg = context.getString(R.string.script_need_auto)
+                        } else {
+                            val ok = WatchScript.installAndStart(
+                                cfg.src, cfg.dst, cfg.intervalSec, cfg.chattr
+                            )
+                            msg = context.getString(if (ok) R.string.script_ok else R.string.script_fail)
+                        }
                         refresh()
                         busy = false
                     }

@@ -3,6 +3,7 @@ package com.tb.rootapp
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -300,7 +301,18 @@ fun RootMediaScreen() {
                 RootBrowserContent(
                     initialPath = suRoot ?: AppConfig.DEFAULT_SU_PATH,
                     onPick = { pickSuFolder(it) },
-                    onClose = null
+                    onClose = null,
+                    onFileTap = { e ->
+                        scope.launch {
+                            val dst = ManualSave.saveFile(context, e.path)
+                            Toast.makeText(
+                                context,
+                                if (dst != null) context.getString(R.string.watch_manual_saved, dst.substringAfterLast('/'))
+                                else context.getString(R.string.watch_manual_fail, e.name),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
                 )
             }
             2 -> Column(
@@ -656,6 +668,10 @@ fun SuThumb(item: MediaItem, imageLoader: ImageLoader) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var saving by remember(item) { mutableStateOf(false) }
+    var saveMsg by remember(item) { mutableStateOf<String?>(null) }
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -686,6 +702,44 @@ fun MediaPreviewDialog(item: MediaItem, onDismiss: () -> Unit) {
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+                if (item.filePath != null) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                saving = true
+                                saveMsg = null
+                                scope.launch {
+                                    val dst = ManualSave.saveFile(context, item.filePath ?: "")
+                                    saveMsg = if (dst != null) {
+                                        context.getString(R.string.watch_manual_saved, dst.substringAfterLast('/'))
+                                    } else {
+                                        context.getString(R.string.watch_manual_fail, item.name)
+                                    }
+                                    saving = false
+                                }
+                            },
+                            enabled = !saving
+                        ) { Text(stringResource(R.string.action_save)) }
+                        if (saving) {
+                            Text(
+                                stringResource(R.string.watch_manual_saving),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        } else {
+                            saveMsg?.let {
+                                Text(
+                                    it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
                 Box(
                     modifier = Modifier.fillMaxSize().padding(top = 12.dp),
                     contentAlignment = Alignment.Center

@@ -1,11 +1,11 @@
 <resources>
-    <string name="app_name">Root App</string>
+    <string name="app_name">Whatsapp viewonce autosaver</string>
 
     <!-- Tabs -->
     <string name="tab_media">Media</string>
     <string name="tab_browser">Browser</string>
     <string name="tab_watch">Jaga</string>
-    <string name="title_media">Root App — Media</string>
+    <string name="title_media">ViewOnce Autosaver</string>
 
     <!-- Sumber -->
     <string name="action_folder">📂 Folder</string>
@@ -70,7 +70,14 @@
     <string name="watch_started">Penjaga jalan — pantau %1$s</string>
     <string name="watch_stopped">Penjaga dihentikan.</string>
     <string name="watch_log">Log:</string>
-    <string name="watch_notif_title">Root App — penjaga aktif</string>
+    <string name="watch_mode_label">Mode simpan:</string>
+    <string name="watch_mode_auto">Otomatis</string>
+    <string name="watch_mode_manual">Manual</string>
+    <string name="watch_manual_hint">Mode manual: ketuk file di tab Browser, atau tombol Simpan di preview, untuk menyimpan ke folder simpan.</string>
+    <string name="watch_manual_saved">Disimpan: %1$s</string>
+    <string name="watch_manual_fail">Gagal menyimpan %1$s (butuh root).</string>
+    <string name="watch_manual_saving">Menyimpan…</string>
+    <string name="watch_notif_title">ViewOnce autosaver aktif</string>
     <string name="watch_notif_monitoring">Memantau folder…</string>
     <string name="watch_notif_watching">Memantau %1$s</string>
     <string name="watch_notif_saved">%1$d file diamankan • total %2$d</string>
@@ -80,7 +87,9 @@
     <string name="watch_channel">Penjaga folder</string>
 
     <!-- Script permanen -->
-    <string name="script_title">Mode permanen (script root):</string>    <string name="script_state">Script: %1$s • %2$s</string>
+    <string name="script_title">Mode permanen (script root):</string>
+    <string name="script_need_auto">Script permanen hanya untuk mode Otomatis. Ganti mode dulu.</string>
+    <string name="action_save">💾 Simpan</string>    <string name="script_state">Script: %1$s • %2$s</string>
     <string name="script_checking">mengecek…</string>
     <string name="script_installed">terpasang</string>
     <string name="script_missing">belum dipasang</string>

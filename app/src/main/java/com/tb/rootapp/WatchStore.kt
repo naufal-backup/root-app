@@ -10,6 +10,7 @@ object WatchStore {
     private const val K_DST = "dst"
     private const val K_INTERVAL = "interval"
     private const val K_CHATTR = "chattr"
+    private const val K_AUTOSAVE = "autosave"
     private const val K_SAVED = "saved_count"
     private const val K_KNOWN = "known"
 
@@ -18,7 +19,8 @@ object WatchStore {
         val src: String = AppConfig.DEFAULT_WATCH_SRC,
         val dst: String = AppConfig.DEFAULT_WATCH_DST,
         val intervalSec: Int = 3,
-        val chattr: Boolean = true
+        val chattr: Boolean = true,
+        val autoSave: Boolean = true
     )
 
     fun load(context: Context): Config {
@@ -29,7 +31,8 @@ object WatchStore {
                 ?: AppConfig.DEFAULT_WATCH_SRC,
             dst = p.getString(K_DST, AppConfig.DEFAULT_WATCH_DST) ?: AppConfig.DEFAULT_WATCH_DST,
             intervalSec = p.getInt(K_INTERVAL, AppConfig.DEFAULT_WATCH_INTERVAL).coerceIn(AppConfig.MIN_WATCH_INTERVAL, AppConfig.MAX_WATCH_INTERVAL),
-            chattr = p.getBoolean(K_CHATTR, true)
+            chattr = p.getBoolean(K_CHATTR, true),
+            autoSave = p.getBoolean(K_AUTOSAVE, true)
         )
     }
 
@@ -40,6 +43,7 @@ object WatchStore {
             .putString(K_DST, cfg.dst)
             .putInt(K_INTERVAL, cfg.intervalSec)
             .putBoolean(K_CHATTR, cfg.chattr)
+            .putBoolean(K_AUTOSAVE, cfg.autoSave)
             .apply()
     }
 

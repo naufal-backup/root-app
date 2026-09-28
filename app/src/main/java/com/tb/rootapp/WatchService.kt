@@ -79,14 +79,14 @@ class WatchService : android.app.Service() {
         while (scope.isActive) {
             try {
                 val cur = WatchStore.load(this)
-                if (!cur.enabled) break
+                if (!cur.enabled || !cur.autoSave) break
                 val entries = RootHelper.ls(cur.src).filter { !it.isDirectory }
                 val fresh = entries.filter { it.name !in known }
                 if (fresh.isNotEmpty()) {
                     RootHelper.suMkdir(cur.dst)
                     var saved = 0
                     for (e in fresh) {
-                        val dst = uniqueDst(cur.dst, e.name)
+                        val dst = RootHelper.uniquePath(cur.dst, e.name)
                         if (RootHelper.suCopy(e.path, dst)) {
                             saved++
                             if (cur.chattr) {
@@ -112,22 +112,6 @@ class WatchService : android.app.Service() {
             }
         }
         stopSelf()
-    }
-
-    private suspend fun uniqueDst(dstDir: String, name: String): String {
-        val clean = name.ifEmpty { "file" }
-        var candidate = "$dstDir/$clean"
-        var i = 1
-        while (RootHelper.suExists(candidate) && i < 100) {
-            val dot = clean.lastIndexOf('.')
-            candidate = if (dot > 0) {
-                "$dstDir/${clean.substring(0, dot)}_$i${clean.substring(dot)}"
-            } else {
-                "$dstDir/${clean}_$i"
-            }
-            i++
-        }
-        return candidate
     }
 
     private fun updateNotif(text: String) {

@@ -135,6 +135,24 @@ object RootHelper {
             execSu("test -e \"$path\" && echo ADA")?.contains("ADA") == true
         }
 
+    /** Cari nama dst yang belum dipakai (tambah _1, _2 bila bentrok). */
+    suspend fun uniquePath(dstDir: String, name: String): String =
+        withContext(Dispatchers.IO) {
+            val clean = name.ifEmpty { "file" }
+            var candidate = "$dstDir/$clean"
+            var i = 1
+            while (suExists(candidate) && i < 100) {
+                val dot = clean.lastIndexOf('.')
+                candidate = if (dot > 0) {
+                    "$dstDir/${clean.substring(0, dot)}_$i${clean.substring(dot)}"
+                } else {
+                    "$dstDir/${clean}_$i"
+                }
+                i++
+            }
+            candidate
+        }
+
     /** Kunci file agar tak bisa dihapus (tetap bisa tambah file baru di dir). */
     suspend fun suChattrImmutable(path: String): Boolean =
         withContext(Dispatchers.IO) {

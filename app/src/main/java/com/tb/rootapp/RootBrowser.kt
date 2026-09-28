@@ -65,7 +65,8 @@ fun RootBrowserDialog(
 fun RootBrowserContent(
     initialPath: String = AppConfig.DEFAULT_SU_PATH,
     onPick: (String) -> Unit,
-    onClose: (() -> Unit)? = null
+    onClose: (() -> Unit)? = null,
+    onFileTap: ((RootEntry) -> Unit)? = null
 ) {
     val scope = rememberCoroutineScope()
     var path by remember { mutableStateOf(initialPath) }
@@ -224,7 +225,13 @@ fun RootBrowserContent(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable(enabled = e.isDirectory) { load(e.path) }
+                                    .clickable(
+                                        enabled = e.isDirectory || onFileTap != null,
+                                        onClick = {
+                                            if (e.isDirectory) load(e.path)
+                                            else onFileTap?.invoke(e)
+                                        }
+                                    )
                                     .padding(vertical = 10.dp, horizontal = 4.dp),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
@@ -259,7 +266,13 @@ fun RootBrowserContent(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable(enabled = e.isDirectory) { load(e.path) }
+                                .clickable(
+                                    enabled = e.isDirectory || onFileTap != null,
+                                    onClick = {
+                                        if (e.isDirectory) load(e.path)
+                                        else onFileTap?.invoke(e)
+                                    }
+                                )
                                 .padding(vertical = 10.dp, horizontal = 4.dp),
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
